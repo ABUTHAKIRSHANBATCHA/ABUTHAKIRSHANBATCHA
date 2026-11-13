@@ -72,7 +72,7 @@ in seven stages:
 6. Information model delivery
 7. Handover and close-out
 
-Then give it the client's documents: "read the EIR at C:\\Projects\\Marina\\EIR.pdf and add the
+Then give it the client's documents: "read the EIR at C:\Projects\Marina\EIR.pdf and add the
 requirements". Each client requirement becomes its own checklist item with the clause as its
 source. Ask "what is open in stage 3?", "mark S3-05 done", or "export the checklist".
 The template is a starting point drawn from ISO 19650-2; review it against your own company
