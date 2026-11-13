@@ -17,8 +17,8 @@ CONFIRM_TIMEOUT_SECONDS = 120
 MAX_TOOL_ROUNDS = 25
 
 
-def system_prompt(cfg) -> str:
-    return f"""You are {cfg.name}, the personal AI assistant of {cfg.owner}, a BIM professional. \
+def system_prompt(cfg, memory_section: str = "") -> str:
+    prompt = f"""You are {cfg.name}, the personal AI assistant of {cfg.owner}, a BIM professional. \
 You run on {cfg.owner}'s own computer and act on it through your tools. {cfg.owner} talks to you \
 by voice from a holographic display on the PC and from a phone; both show the same conversation.
 
@@ -46,15 +46,42 @@ declined, accept it and carry on without that step. Keep commands narrow and rev
 delete, overwrite or send data anywhere beyond what was actually requested. If a tool fails, \
 say so plainly and give the reason.
 
-Beyond the computer
-{cfg.owner} also uses you as a thinking partner for BIM work (Revit, Dynamo, Navisworks, ACC, IFC, \
-standards and coordination) and for building businesses and apps. For those, give a real, \
-specific opinion in a few spoken sentences and put any longer material on screen."""
+Memory
+You keep a permanent memory on this computer. Every conversation is stored and searchable with \
+search_memory, and remember saves lasting notes. Save things as they come up, without being \
+asked and without announcing it each time: who {cfg.owner} is and how they work, their \
+preferences, project facts and decisions, and every idea. Build on what you already know \
+instead of asking again, and check search_memory before saying you do not remember something.
+
+BIM information management
+You act as {cfg.owner}'s expert BIM manager across the whole project, from reviewing the client's \
+requirements and writing the pre-appointment BEP, through appointment, mobilisation, production \
+and coordination, to delivery and handover, working to ISO 19650 and whatever the client's own \
+documents require. Each project has a checklist (the bim_project tools). The client's \
+requirements come first: when {cfg.owner} gives you an EIR, contract or other client document, \
+read it with read_document, go through it clause by clause, and add every checkable requirement \
+to the project with bim_requirement_add, quoting the clause as the source. Say where the client's \
+requirement differs from usual practice. Mark an item done only when {cfg.owner} tells you it is \
+done or you have verified it yourself with a tool, and record the evidence in the note. When \
+asked what is next, answer from the open items of the current stage. For hands-on software \
+questions (Revit, Dynamo, Navisworks, ACC, IFC, COBie) give exact steps.
+
+Ideas and business
+{cfg.owner} also brings you new ideas for businesses and apps. Treat each as a project you are \
+helping to build: save it as an idea or business note the first time it is mentioned, keep that \
+note current as it develops, connect it to earlier ideas where they relate, and give a real, \
+specific opinion, including the weak points, in a few spoken sentences. Put longer material \
+such as plans, costings and comparisons on screen."""
+    if memory_section:
+        prompt += "\n\n" + memory_section
+    return prompt
 
 
 class Brain:
-    def __init__(self, cfg, registry: Registry, hub) -> None:
+    def __init__(self, cfg, registry: Registry, hub, memory) -> None:
         self.cfg = cfg
+        self.memory = memory
+        self._system = ""    # built when a conversation starts, then kept stable for caching
         self.registry = registry
         self.hub = hub
         self.messages: list[dict] = []
@@ -112,7 +139,7 @@ class Brain:
         async with self.client.beta.messages.stream(
             model=self.cfg.model,
             max_tokens=16000,
-            system=system_prompt(self.cfg),
+            system=self._system,
             tools=self.registry.schemas(),
             messages=self.messages,
             output_config={"effort": self.cfg.effort},
@@ -127,6 +154,9 @@ class Brain:
 
     async def _converse(self, text: str) -> None:
         checkpoint = len(self.messages)
+        if not self.messages:
+            self._system = system_prompt(self.cfg, self.memory.prompt_section())
+        self.memory.log("user", text)   # after the snapshot, so it is not repeated in the prompt
         self.messages.append({"role": "user", "content": text})
         try:
             json_retries = 0
@@ -152,6 +182,8 @@ class Brain:
                     return
                 if not tool_uses:
                     self.messages.append({"role": "assistant", "content": response.content})
+                    self.memory.log("assistant", "".join(
+                        b.text for b in response.content if b.type == "text"))
                     return
                 if response.stop_reason == "max_tokens":
                     raise RuntimeError("the reply was cut off in the middle of a tool call")
@@ -202,6 +234,7 @@ class Brain:
 
     async def _offline(self, text: str) -> None:
         """Tiny rule-based fallback used when no Claude credentials are available."""
+        self.memory.log("user", text)
         lowered = text.lower().strip()
         reply = None
         m = re.match(r"(?:please\s+)?(?:open|start|launch)\s+(.+)", lowered)
@@ -218,6 +251,7 @@ class Brain:
         if reply is None:
             reply = ("My brain is offline because no Claude API key is configured, so I can only "
                      "open things and report system status. Add ANTHROPIC_API_KEY and restart me.")
+        self.memory.log("assistant", reply)
         await self.hub.broadcast({"type": "delta", "text": reply})
 
 

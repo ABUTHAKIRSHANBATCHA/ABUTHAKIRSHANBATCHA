@@ -125,6 +125,35 @@ def read_file(path: str) -> str:
     return _clip(data.decode("utf-8", errors="replace"), 30_000)
 
 
+def read_document(path: str, start_char: int = 0) -> str:
+    """Text of a PDF or Word document, e.g. a client EIR or a BEP."""
+    p = _path(path)
+    if not p.is_file():
+        return f"Not a file: {p}"
+    suffix = p.suffix.lower()
+    if suffix == ".pdf":
+        from pypdf import PdfReader
+        text = "\n\n".join(f"[page {n}]\n{page.extract_text() or ''}"
+                           for n, page in enumerate(PdfReader(str(p)).pages, 1))
+    elif suffix == ".docx":
+        import docx
+        doc = docx.Document(str(p))
+        parts = [para.text for para in doc.paragraphs if para.text.strip()]
+        for table in doc.tables:
+            for row in table.rows:
+                parts.append(" | ".join(cell.text.strip() for cell in row.cells))
+        text = "\n".join(parts)
+    else:
+        return "read_document handles .pdf and .docx files. Use read_file for plain text."
+    if not text.strip():
+        return "No text could be extracted; the document may be scanned images."
+    chunk = text[start_char:start_char + 60_000]
+    if start_char + 60_000 < len(text):
+        chunk += (f"\n... [document continues: {len(text)} characters in total; "
+                  f"call again with start_char={start_char + 60_000}]")
+    return chunk
+
+
 def write_file(path: str, contents: str) -> str:
     p = _path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -173,6 +202,13 @@ def register(reg: Registry, cfg, hub) -> None:
     reg.add(Tool(
         "read_file", "Read a text file from this computer (first 30,000 characters).",
         {"path": {"type": "string"}}, ["path"], read_file))
+    reg.add(Tool(
+        "read_document",
+        "Read the text of a PDF or Word (.docx) document on this computer, such as a client's EIR, "
+        "a BEP, a contract or a specification. Long documents come in parts of 60,000 characters.",
+        {"path": {"type": "string"},
+         "start_char": {"type": "integer", "description": "Where to continue a long document"}},
+        ["path"], read_document))
     reg.add(Tool(
         "write_file",
         "Create or overwrite a text file on this computer. The owner is asked to approve first.",

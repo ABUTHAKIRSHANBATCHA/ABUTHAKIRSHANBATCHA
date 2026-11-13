@@ -1,22 +1,26 @@
 import asyncio
 import json
+import pathlib
 from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 
+from assistant.brain import system_prompt
 from assistant.config import Config
+from assistant.memory import Memory
 from assistant.server import Devices, create_app
 from assistant.tools import build_registry
 from assistant.tools import bim
+from assistant.tools.lifecycle import STAGES, TEMPLATE, Projects
 
 
 @pytest.fixture
 def app(tmp_path, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
-    return create_app(Config(), Devices(tmp_path / "devices.json"))
+    return create_app(Config(data_dir=str(tmp_path / "data")), Devices(tmp_path / "devices.json"))
 
 
 def drain(ws, until):
@@ -188,3 +192,80 @@ def test_system_tools(app, tmp_path):
     assert asyncio.run(reg.run("read_file", {"path": str(tmp_path / "a.txt")})) == "வணக்கம்"
     assert "a.txt" in asyncio.run(reg.run("list_directory", {"path": str(tmp_path)}))
     assert "exit code 0" in asyncio.run(reg.run("run_command", {"command": "echo hi"}))
+
+
+def test_memory_survives_restart_and_reaches_the_prompt(tmp_path):
+    m = Memory(tmp_path)
+    m.log("user", "My Dubai tower client wants COBie at every stage")
+    m.log("assistant", "Noted, COBie at every stage for the Dubai tower.")
+    m.remember("profile", "Role", "BIM manager, works mostly in Revit")
+    m.remember("idea", "Clash app", "Mobile app that shows clashes on site")
+    assert "Updated" in m.remember("idea", "clash app", "Mobile app for site clash review, version 2")
+
+    again = Memory(tmp_path)                      # a fresh start reads everything back
+    assert len(again.notes) == 2 and len(again.transcript()) == 2
+    prompt = system_prompt(Config(), again.prompt_section())
+    assert "BIM manager, works mostly in Revit" in prompt       # profile in full
+    assert "Clash app" in prompt and "version 2" in prompt      # idea listed
+    assert "COBie at every stage" in prompt                     # recent conversation carried over
+
+    found = json.loads(again.search("cobie dubai"))
+    assert found["conversation_passages"] and "COBie" in found["conversation_passages"][0][0]["text"]
+    assert json.loads(again.search("clash"))["notes"][0]["title"] == "Clash app"
+    assert "Deleted" in again.forget("Clash app") and len(Memory(tmp_path).notes) == 1
+
+
+def test_conversation_is_logged_and_system_prompt_stays_stable(app):
+    brain = app.state.brain
+    FakeStreamBrain(brain, [message(TEXT, stop="end_turn")] * 3)
+    asyncio.run(brain.handle("remember that I prefer metric units"))
+    first = brain._system
+    asyncio.run(brain.handle("and again"))
+    assert brain._system == first                                # unchanged mid-conversation
+    assert [(t["role"], t["text"]) for t in brain.memory.transcript()] == [
+        ("user", "remember that I prefer metric units"), ("assistant", "Done."),
+        ("user", "and again"), ("assistant", "Done.")]
+    brain.reset()
+    asyncio.run(brain._converse("new conversation"))
+    assert "I prefer metric units" in brain._system              # the next conversation sees the last one
+    assert "new conversation" not in brain._system
+
+
+def test_bim_project_lifecycle(tmp_path):
+    projects = Projects(tmp_path)
+    assert "already exists" not in projects.create("Marina Tower", client="ABC Developers")
+    assert "already exists" in projects.create("Marina Tower")
+    total = sum(len(v) for v in TEMPLATE.values())
+    overview = json.loads(projects.status("marina"))
+    assert overview["overall"] == {"done": 0, "total": total, "percent": 0}
+    assert [s["stage"] for s in overview["stages"]] == list(STAGES)
+
+    assert "C1-01" in projects.add_requirement("marina", 1, "Models in Revit 2024 only", "EIR 3.2")
+    assert "C7-01" in projects.add_requirement("marina", 7, "COBie 2.4 UK at handover", "EIR 9.1")
+    assert "Stage must be" in projects.add_requirement("marina", 9, "x")
+    assert "now done" in projects.update_item("marina", "c1-01", "done", "Confirmed by email 12 Nov")
+    assert "not_applicable" in projects.update_item("marina", "S1-07", "not_applicable")
+    assert "No item" in projects.update_item("marina", "S9-99", "done")
+
+    stage1 = json.loads(projects.status("marina", stage=1))["stages"][0]
+    assert stage1["done"] == 1 and stage1["total"] == len(TEMPLATE[1])      # +1 client, -1 n/a
+    client_item = next(i for i in stage1["items"] if i["id"] == "C1-01")
+    assert client_item["source"] == "Client requirement: EIR 3.2" and client_item["note"]
+    open_ids = [i["id"] for i in json.loads(projects.status("marina", stage=1, only_open=True))["stages"][0]["items"]]
+    assert "C1-01" not in open_ids and "S1-07" not in open_ids and "S1-01" in open_ids
+
+    text = pathlib.Path(projects.export("marina").split(" to ", 1)[1]).read_text(encoding="utf-8")
+    assert "[x] `C1-01` **(client)** Models in Revit 2024 only" in text and "Note: Confirmed by email" in text
+    assert json.loads(Projects(tmp_path).status())["projects"][0]["name"] == "Marina Tower"
+    assert "No project" in projects.status("unknown")
+
+
+def test_read_document_docx(app, tmp_path):
+    import docx
+    doc = docx.Document()
+    doc.add_paragraph("4.3 All models shall be delivered in IFC4.")
+    table = doc.add_table(rows=1, cols=2)
+    table.rows[0].cells[0].text, table.rows[0].cells[1].text = "Stage 4", "LOD 350"
+    doc.save(tmp_path / "eir.docx")
+    out = asyncio.run(app.state.brain.registry.run("read_document", {"path": str(tmp_path / "eir.docx")}))
+    assert "delivered in IFC4" in out and "Stage 4 | LOD 350" in out

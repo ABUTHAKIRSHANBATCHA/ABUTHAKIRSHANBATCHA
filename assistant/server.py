@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from .brain import Brain
 from .config import DATA_DIR, WEB_DIR, Config
+from .memory import Memory
 from .tools import build_registry
 from .tools.system import system_stats
 
@@ -113,7 +114,8 @@ class PairRequest(BaseModel):
 def create_app(cfg: Config, devices: Devices | None = None) -> FastAPI:
     hub = Hub()
     devices = devices or Devices()
-    brain = Brain(cfg, build_registry(cfg, hub), hub)
+    memory = Memory(cfg.data_path / "memory")
+    brain = Brain(cfg, build_registry(cfg, hub, memory), hub, memory)
 
     async def stats_loop() -> None:
         while True:

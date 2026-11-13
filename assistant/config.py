@@ -21,6 +21,11 @@ class Config:
     default_language: str = "en-IN"  # en-IN or ta-IN
     bim_search_roots: list[str] = field(default_factory=list)
     revit_bridge_url: str = "http://127.0.0.1:48884/assistant"
+    data_dir: str = ""               # where memory and projects are stored; default: ./data
+
+    @property
+    def data_path(self) -> Path:
+        return Path(self.data_dir).expanduser() if self.data_dir else DATA_DIR
 
 
 def load_config(path: Path | None = None) -> Config:

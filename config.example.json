@@ -7,5 +7,6 @@
   "https_port": 8443,
   "default_language": "en-IN",
   "bim_search_roots": [],
-  "revit_bridge_url": "http://127.0.0.1:48884/assistant"
+  "revit_bridge_url": "http://127.0.0.1:48884/assistant",
+  "data_dir": ""
 }

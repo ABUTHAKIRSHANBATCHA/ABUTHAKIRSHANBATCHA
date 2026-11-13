@@ -14,6 +14,8 @@ The name is a setting, so you can choose it later.
 | PC control: open apps, files and websites, read and write files, run PowerShell | Working |
 | Approval before any command or file write, by button or by saying "yes" / "சரி" | Working |
 | Phone connection over Wi-Fi with one-time PIN pairing | Working |
+| Permanent memory: every conversation is stored on your PC and searchable; notes on you, your projects and your ideas carry into every new conversation | Working (the assistant deciding what to save needs the Claude brain) |
+| BIM project checklists from client requirements review and pre-appointment BEP to handover (ISO 19650), plus the client's own requirements read from PDF / Word documents | Working (reading and breaking down an EIR needs the Claude brain) |
 | Find installed BIM software, launch it, find model files (.rvt .nwd .ifc .dwg ...) | Written for Windows; not yet run on a Windows PC |
 | Live Revit model queries (model info, element counts, warnings, levels, sheets, links) | Written; not yet run inside Revit |
 | Brain (Claude) | Needs your API key; without one it only opens things and reports status |
@@ -50,6 +52,32 @@ Copy `config.example.json` to `config.json` and edit:
 Other settings: `model`, `effort` (`low` is faster, `high` is smarter),
 `default_language` (`en-IN` or `ta-IN`), `bim_search_roots` (folders to search for models).
 
+## Memory
+
+Everything is kept in the `data` folder on your PC: `data/memory/transcript.jsonl` (every
+conversation) and `data/memory/notes.json` (what it has learned about you, your projects and
+your ideas). Back this folder up; deleting it wipes the memory. Say "forget ..." to remove a note.
+`START A NEW CONVERSATION` in the menu clears the screen, not the memory.
+
+## BIM projects
+
+Say "start a project called Marina Tower for ABC Developers". It creates a 53-item checklist
+in seven stages:
+
+1. Client requirements review
+2. Tender response and pre-appointment BEP
+3. Appointment and BEP confirmation
+4. Mobilisation
+5. Collaborative production
+6. Information model delivery
+7. Handover and close-out
+
+Then give it the client's documents: "read the EIR at C:\\Projects\\Marina\\EIR.pdf and add the
+requirements". Each client requirement becomes its own checklist item with the clause as its
+source. Ask "what is open in stage 3?", "mark S3-05 done", or "export the checklist".
+The template is a starting point drawn from ISO 19650-2; review it against your own company
+procedures.
+
 ## Connect Revit
 
 1. Install [pyRevit](https://github.com/pyrevitlabs/pyRevit/releases).
@@ -73,7 +101,10 @@ Then ask "how many warnings are in my model?" The bridge is read-only.
 - **Recognising only your voice** (speaker verification) and a wake word ("Hey ...").
   Both need an audio model running on the PC; today, access is protected by pairing instead.
 - Using the phone away from home Wi-Fi.
-- Changing the Revit model (the bridge only reads), Navisworks and ACC automation.
+- Operating the BIM software itself: changing the Revit model (the bridge only reads),
+  running Navisworks clash tests, ACC uploads and transmittals. Today it manages the process
+  and checklists and reads from Revit; it does not do the modelling work.
+- Scanned PDFs (no text layer) and Excel requirement sheets cannot be read yet.
 - Controlling the phone itself (calls, messages, notifications).
 - A physical hologram: the display is a hologram-style screen. A fan or pyramid
   holographic display can show it as-is.
