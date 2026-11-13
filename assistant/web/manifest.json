@@ -1,0 +1,10 @@
+{
+  "name": "Personal Assistant",
+  "short_name": "Assistant",
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#02070d",
+  "theme_color": "#02070d",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
