@@ -269,3 +269,33 @@ def test_read_document_docx(app, tmp_path):
     doc.save(tmp_path / "eir.docx")
     out = asyncio.run(app.state.brain.registry.run("read_document", {"path": str(tmp_path / "eir.docx")}))
     assert "delivered in IFC4" in out and "Stage 4 | LOD 350" in out
+
+
+def test_toolset_launch_matching(tmp_path):
+    exe = tmp_path / "MyTool.exe"
+    exe.write_text("")
+    installed = [
+        {"name": "Autodesk Revit 2024", "executable": "r24.exe"},
+        {"name": "Autodesk Revit 2025", "executable": "r25.exe"},
+        {"name": "Autodesk Revit 2026", "executable": ""},                 # found but not launchable
+        {"name": "Autodesk Civil 3D 2025 - English", "executable": "acad.exe"},
+        {"name": "AutoCAD Plant 3D 2025 - English", "executable": "acad.exe"},
+        {"name": "Autodesk AutoCAD 2025 - English", "executable": "acad.exe"},
+        {"name": "Unreal Engine 5.4", "executable": "UnrealEditor.exe"},
+    ]
+    assert bim.pick_install(installed, "revit")["name"] == "Autodesk Revit 2025"
+    assert bim.pick_install(installed, "Revit 2024")["executable"] == "r24.exe"
+    assert bim.pick_install(installed, "tekla") is None
+    assert bim.launch_command(bim.pick_install(installed, "civil 3d")) == ["acad.exe", "/product", "C3D"]
+    assert bim.launch_command(bim.pick_install(installed, "plant 3d"), "a.dwg") == ["acad.exe", "/product", "PLNT3D", "a.dwg"]
+    assert bim.launch_command(bim.pick_install(installed, "autocad 2025")) == ["acad.exe"]
+    assert bim.launch_command(bim.pick_install(installed, "unreal"), "g.uproject") == ["UnrealEditor.exe", "g.uproject"]
+
+    cfg = Config(extra_software=[{"name": "My Pipeline Tool", "executable": str(exe)},
+                                 {"name": "Missing Tool", "executable": str(tmp_path / "nope.exe")}])
+    listed = json.loads(bim.find_bim_software(cfg))
+    assert "Unreal Engine" in listed["owner_toolset"]
+    assert {r["name"]: bool(r["executable"]) for r in listed["installed"]} == {
+        "My Pipeline Tool": True, "Missing Tool": False}
+    assert bim.pick_install(bim.installed_software(cfg), "pipeline")["executable"] == str(exe)
+    assert "Unreal Engine" in system_prompt(cfg) and "Civil 3D" in system_prompt(cfg)

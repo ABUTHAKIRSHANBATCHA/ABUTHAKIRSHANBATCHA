@@ -78,6 +78,24 @@ source. Ask "what is open in stage 3?", "mark S3-05 done", or "export the checkl
 The template is a starting point drawn from ISO 19650-2; review it against your own company
 procedures.
 
+## Your software
+
+The assistant is set up for Civil 3D, Revit, Navisworks, AutoCAD (2D and 3D), AutoCAD Plant 3D
+and Unreal Engine. It finds the installed versions itself and can start them ("open Civil 3D",
+"open the tower model in Revit 2025").
+
+To add a tool later, edit `config.json`:
+
+```json
+{
+  "toolset": ["Autodesk Civil 3D", "Revit", "Navisworks", "Unreal Engine", "Your New Tool"],
+  "extra_software": [{ "name": "Your New Tool", "executable": "C:/Program Files/NewTool/tool.exe" }]
+}
+```
+
+`toolset` is what it treats as your working software when giving advice; `extra_software`
+is only needed when it cannot find a program on its own.
+
 ## Connect Revit
 
 1. Install [pyRevit](https://github.com/pyrevitlabs/pyRevit/releases).

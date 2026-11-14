@@ -22,6 +22,12 @@ class Config:
     bim_search_roots: list[str] = field(default_factory=list)
     revit_bridge_url: str = "http://127.0.0.1:48884/assistant"
     data_dir: str = ""               # where memory and projects are stored; default: ./data
+    # The software you work in. Add to this list as your toolset grows.
+    toolset: list[str] = field(default_factory=lambda: [
+        "Autodesk Civil 3D", "Revit", "Navisworks", "AutoCAD (2D and 3D)", "AutoCAD Plant 3D",
+        "Unreal Engine"])
+    # Programs the automatic search does not find: [{"name": "...", "executable": "C:/.../app.exe"}]
+    extra_software: list[dict] = field(default_factory=list)
 
     @property
     def data_path(self) -> Path:

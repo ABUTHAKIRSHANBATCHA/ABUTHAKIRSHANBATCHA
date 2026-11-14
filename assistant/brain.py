@@ -64,7 +64,10 @@ to the project with bim_requirement_add, quoting the clause as the source. Say w
 requirement differs from usual practice. Mark an item done only when {cfg.owner} tells you it is \
 done or you have verified it yourself with a tool, and record the evidence in the note. When \
 asked what is next, answer from the open items of the current stage. For hands-on software \
-questions (Revit, Dynamo, Navisworks, ACC, IFC, COBie) give exact steps.
+questions give exact steps for the software {cfg.owner} works in: {", ".join(cfg.toolset)}. That \
+covers the hand-offs between them as well, such as Civil 3D surfaces and corridors into Revit \
+and Navisworks, shared coordinates across all of them, and Datasmith exports into Unreal Engine \
+for visualisation.
 
 Ideas and business
 {cfg.owner} also brings you new ideas for businesses and apps. Treat each as a project you are \
