@@ -15,6 +15,7 @@
   let lang = store.get("lang") || "en-IN";
   let handsFree = false, muted = store.get("muted") === "1";
   let assistantName = "", tapped = false, followUntil = 0;   // wake-word state
+  let voiceLocked = false, voicePass = "", voicePassUntil = 0, checkingVoice = false;
   const FOLLOW_UP_MS = 20000;
   let pendingSend = false, iAsked = false, replyText = "", speakBuffer = "";
   let recognition = null, listening = false, busy = false, speaking = 0;
@@ -181,7 +182,28 @@
   }
   function hush() { if (synth) synth.cancel(); speaking = 0; speakBuffer = ""; }
 
-  function startListening() {
+  // With voice lock on, spoken commands need a recent voice check on this device.
+  async function voiceCheck() {
+    if (!voiceLocked || Date.now() < voicePassUntil) return true;
+    if (checkingVoice) return false;
+    checkingVoice = true; hush(); setState("listening");
+    showReply(lang === "ta-IN" ? "குரல் சரிபார்ப்பு: இப்போது பேசுங்கள்." : `Voice check: say "Hey ${assistantName}, it's me" now.`);
+    try {
+      const r = await Voice.verify(3);
+      if (r.ok) {
+        voicePass = r.token; voicePassUntil = Date.now() + (r.seconds - 30) * 1000;
+        showReply(`Voice recognised: ${r.name}.`); return true;
+      }
+      showReply("I did not recognise that voice. Spoken commands stay locked.", true);
+    } catch (e) { showReply(`Voice check failed: ${e.message}`, true); }
+    finally { checkingVoice = false; }
+    handsFree = false; $("hands").classList.remove("on"); setState("idle");
+    return false;
+  }
+
+  async function startListening() {
+    if (listening || speaking > 0 || checkingVoice) return;
+    if (!(await voiceCheck())) return;
     if (!SR) { showReply("Voice input needs Chrome or Edge. You can still type.", true); return; }
     if (listening || speaking > 0) return;
     recognition = new SR();
@@ -232,15 +254,15 @@
       if (YES.test(text)) return answerConfirm(true);
       if (NO.test(text)) return answerConfirm(false);
     }
-    say(text);
+    say(text, true);
   }
 
   // ------------------------------------------------------------------- link
 
-  function say(text) {
+  function say(text, spoken) {
     if (!ws || ws.readyState !== 1) { showReply("Not connected to the PC yet.", true); return; }
     hush(); pendingSend = true;
-    ws.send(JSON.stringify({ type: "say", text }));
+    ws.send(JSON.stringify(spoken ? { type: "say", text, via: "voice", voice_pass: voicePass } : { type: "say", text }));
   }
   function showReply(text, isError) {
     $("reply").textContent = text; $("reply").classList.toggle("error", !!isError);
@@ -253,7 +275,8 @@
 
   const handlers = {
     hello(e) {
-      assistantName = e.name;
+      assistantName = e.name; voiceLocked = e.voice.locked;
+      $("open-voice").hidden = !e.voice.available;
       document.title = e.name; $("name").textContent = e.name.toUpperCase();
       $("hands").textContent = `"HEY ${e.name.toUpperCase()}"`;
       setLink(e.online ? "ONLINE" : "BRAIN OFFLINE - NO API KEY", !e.online);
@@ -276,6 +299,10 @@
     tool: logTool,
     dashboard: drawDashboard,
     holo(e) { Holo.act(e.action); },
+    voice_rejected() {
+      pendingSend = false; voicePassUntil = 0;
+      showReply("Voice lock: I need to recognise your voice first. Tap the mic and try again.", true);
+    },
     card,
     stats(e) {
       gauge("cpu", e.cpu, e.cpu > 85); gauge("memory", e.memory, e.memory > 88);
@@ -286,10 +313,19 @@
     cleared() { $("heard").textContent = ""; showReply(""); $("log").replaceChildren(); },
     confirm_request(e) {
       pendingConfirm = e.id;
-      $("confirm-title").textContent = e.name === "run_command" ? "Run this command on the PC?"
-        : e.name === "write_file" ? `Write this file?  ${e.input.path || ""}` : `Allow ${e.name}?`;
+      const titles = {
+        run_command: "Run this command on the PC?", write_file: `Write this file?  ${e.input.path || ""}`,
+        email_send: `Send this email to ${e.input.to || ""}?`, email_inbox: "Let me look at your inbox?",
+        email_read: "Let me open this email?", use_connector: `Send this to ${e.input.name || "the app"}?`,
+        add_voice: `Allow the voice "${e.input.voice || ""}" to give spoken commands?`,
+        remove_voice: `Remove the voice "${e.input.voice || ""}"?`,
+      };
+      $("confirm-title").textContent = titles[e.name] || `Allow ${e.name.replaceAll("_", " ")}?`;
       $("confirm-detail").textContent = e.name === "run_command" ? e.input.command
-        : e.name === "write_file" ? String(e.input.contents || "").slice(0, 4000) : JSON.stringify(e.input, null, 2);
+        : e.name === "write_file" ? String(e.input.contents || "").slice(0, 4000)
+        : e.name === "email_send" ? `Subject: ${e.input.subject}\n\n${e.input.body}`
+        : e.name === "add_voice" ? e.input.detail
+        : JSON.stringify(e.input, null, 2);
       if (!$("confirm").open) $("confirm").showModal();
       speak(lang === "ta-IN" ? "உங்கள் அனுமதி தேவை." : "I need your approval for this.");
     },
@@ -336,6 +372,35 @@
     $("menu").showModal();
   };
   $("close-menu").onclick = () => $("menu").close();
+  async function showVoices() {
+    const info = await Voice.info();
+    voiceLocked = info.locked;
+    $("voice-status").textContent = info.voices.length
+      ? "Spoken commands are accepted only from these voices. Adding another voice needs your approval."
+      : "No voice is enrolled yet, so anyone can speak to me. Add your own voice first.";
+    $("voice-list").replaceChildren(...info.voices.map((v) => {
+      const remove = el("button", { className: "ghost", textContent: "REMOVE", type: "button" });
+      remove.onclick = async () => { await Voice.remove(v.name).catch(() => {}); showVoices(); };
+      return el("li", null, el("span", { textContent: `${v.name} (${v.samples} samples)` }), remove);
+    }));
+  }
+  $("open-voice").onclick = () => { $("menu").close(); $("voice-step").textContent = ""; $("voice").showModal(); showVoices(); };
+  $("close-voice").onclick = () => $("voice").close();
+  $("voice-form").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const name = $("voice-name").value.trim(), step = $("voice-step");
+    const lines = [`Hey ${assistantName}, it's me. Open my project and show the status.`,
+      "This is my voice. Only I may give you spoken commands.",
+      "வணக்கம், இது என் குரல். என் வேலையைத் தொடங்கலாம்."];
+    try {
+      for (let i = 0; i < lines.length; i++) {
+        step.textContent = `Sample ${i + 1} of 3 - read aloud now: "${lines[i]}"`;
+        await Voice.enroll(name, 5);
+      }
+      step.textContent = "Voice added.";
+    } catch (e) { step.textContent = `Could not add the voice: ${e.message}`; }
+    showVoices();
+  });
   $("open-holo").onclick = () => { $("menu").close(); Holo.open(); };
   $("open-data").onclick = () => { $("menu").close(); document.body.classList.add("show-data"); $("close-data").hidden = false; };
   $("close-data").onclick = () => { document.body.classList.remove("show-data"); $("close-data").hidden = true; };

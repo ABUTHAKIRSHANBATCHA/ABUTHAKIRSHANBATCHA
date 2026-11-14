@@ -78,6 +78,11 @@ small { display: block; font-size: .68rem; letter-spacing: .3em; color: var(--ho
   border: 1px solid var(--holo); border-radius: 4px; padding: 5px 9px; font-size: .78rem;
   max-width: 240px; box-shadow: 0 0 18px rgba(79, 227, 255, .25); }
 #tip[hidden] { display: none; }
+#voice-list { list-style: none; padding: 0; margin-bottom: 12px; }
+#voice-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 6px 0; border-bottom: 1px solid var(--holo-faint); font-size: .95rem; }
+#voice-list button { padding: 5px 10px; font-size: .68rem; }
+#voice-form { display: flex; flex-direction: column; }
 #open-data, #close-data { display: none; }
 h2 { font-size: .72rem; letter-spacing: .34em; color: var(--holo-dim); font-weight: 500; margin-bottom: 10px; }
 h3 { font-size: .68rem; letter-spacing: .26em; color: var(--holo-dim); font-weight: 500; margin-bottom: 6px; }

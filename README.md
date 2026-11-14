@@ -20,19 +20,32 @@ It is called Lumi; the name is a setting you can change.
 | Wake phrase: press `"HEY LUMI"`, then say "Hey Lumi, ..." to give a command; follow-ups within 20 seconds need no wake phrase | Logic tested with a simulated microphone; not yet tried with a real one |
 | Money tracking: record income and expenses per business by voice; income chart on the dashboard | Working (recording by voice needs the Claude brain) |
 | Hologram mode: camera view with a 3D building model you move with your hands (pinch to rotate, fist to move, two pinches to scale, spread two open palms to explode the levels); also by voice ("Hey Lumi, explode the model") | Gesture logic and hand-tracking library tested; not yet tried with real hands on a real camera |
+| Voice lock: only enrolled voices can give spoken commands; adding another voice needs your approval; runs on your PC | Tested with recordings of two different people; not yet with your voice or a phone microphone |
+| Telegram: message Lumi from your phone anywhere, approve actions by replying YES or NO | Tested against a simulated Telegram; not yet with a real bot |
+| Email (off until you turn it on): read the inbox, read a message, send or reply, each only after your approval | Tested against simulated mail servers; not yet with a real mailbox |
+| Helper agents: researcher and business analyst (with web search), BIM specialist, writer | Tested with a stand-in model; needs the Claude brain |
+| Connectors: send data to your other apps, such as your own dashboard, each call approved by you | Working |
 | Find installed BIM software, launch it, find model files (.rvt .nwd .ifc .dwg ...) | Written for Windows; not yet run on a Windows PC |
 | Live Revit model queries (model info, element counts, warnings, levels, sheets, links) | Written; not yet run inside Revit |
 | Brain (Claude) | Needs your API key; without one it only opens things and reports status |
 
-## Start it (Windows)
+## Set up and start (Windows)
 
-1. Install [Python 3.10+](https://www.python.org/downloads/) (tick "Add to PATH").
-2. Get an API key from <https://platform.claude.com> and set it once in a terminal:
-   `setx ANTHROPIC_API_KEY "your-key"` (then open a new terminal).
-3. Double-click `start.bat`. The HUD opens at <http://127.0.0.1:8765>.
+1. Install [Python 3.10+](https://www.python.org/downloads/) and tick "Add to PATH".
+2. Double-click `setup.bat`. It installs everything and asks for:
+   - the assistant's name and what it should call you
+   - your Claude API key (from <https://platform.claude.com>)
+   - a Telegram bot token (optional)
+   - your email address and app password (optional)
+   - whether to install voice lock (downloads about 60 MB)
+3. Double-click `start.bat`. The screen opens at <http://127.0.0.1:8765>.
+
+Run `setup.bat` again whenever you want to change an answer. Settings are saved in
+`config.json`; keys and passwords are saved in `secrets.env`, which stays on your PC.
 
 Use Chrome or Edge. Tap the mic (or press Space) and talk. Press `"HEY LUMI"` to keep it
-listening: it then acts only when you start with "Hey Lumi" (or "ஹே லூமி"). Tap the mic while it is speaking to interrupt.
+listening: it then acts only when you start with "Hey Lumi" (or "ஹே லூமி").
+Tap the mic while it is speaking to interrupt.
 
 ## Connect your phone
 
@@ -44,6 +57,83 @@ listening: it then acts only when you start with "Hey Lumi" (or "ஹே லூ�
 
 Windows may ask to allow Python through the firewall the first time; allow it for
 private networks.
+
+## Voice lock (only your voice)
+
+1. Choose voice lock in `setup.bat`.
+2. On the PC or your phone, open MENU > VOICE LOCK, type your name, press ADD THIS VOICE and
+   read the three lines aloud. The first voice added becomes the owner.
+3. From then on, before listening Lumi asks for a short voice check ("Hey Lumi, it's me").
+   A recognised voice unlocks spoken commands on that device for 10 minutes.
+
+- Another person's voice can be added only after you press APPROVE on a paired screen.
+- Removing a voice also needs approval.
+- Typed messages from paired devices are not affected; pairing protects those.
+- Matching runs on your PC. Only numbers describing the voice are stored, not recordings.
+- No voice match is perfect. Background noise or a cold can cause a refusal, and a very
+  similar voice or a recording of you could pass. Raise `voice_threshold` in `config.json`
+  (default 0.6) to make it stricter.
+
+## Talk to Lumi from anywhere (Telegram)
+
+1. In Telegram, message **@BotFather**, send `/newbot`, and copy the token.
+2. Enter the token in `setup.bat` and start Lumi.
+3. Send your bot `/pair 123456` using the PIN from MENU on the PC.
+
+Now you can message Lumi from anywhere your phone has internet, as long as the PC is on.
+When an action needs approval, Lumi asks in the chat and you reply YES or NO. Text only for
+now; voice notes are not read.
+
+WhatsApp is not included: it only allows this through a WhatsApp Business account approved
+by Meta plus a public web address for your PC. Telegram needs neither.
+
+## Email
+
+Turn it on in `setup.bat` with your address and an **app password** (Gmail: Google Account >
+Security > App passwords; do not use your normal password). Then: "check my inbox",
+"read the one from ABC", "reply that we will send it Monday".
+
+- Every send shows you the full email and waits for APPROVE.
+- Every look at the inbox also waits for approval. To stop being asked for reading only, set
+  `"ask_before_reading": false` under `email` in `config.json`.
+- Reading never marks mail as read, and nothing is deleted.
+- To switch email off, run `setup.bat` again and answer `n`.
+
+## Helper agents
+
+Lumi hands bigger jobs to helpers and gives you the conclusion:
+
+| Helper | Does |
+|---|---|
+| Researcher | Searches the web for current facts with sources |
+| Business analyst | Market, competitors, pricing and risks for an idea, with web search |
+| BIM specialist | Drafts and reviews BEP sections, matrices, checks and handover data |
+| Writer | Finished emails, proposals and reports |
+
+Try: "research the BIM audit market in Dubai and tell me if it is worth starting".
+
+## Connect your own dashboard and other apps
+
+**Your dashboard reading from Lumi:** `GET http://127.0.0.1:8765/api/status` returns projects,
+stage progress, income, requests and ideas as JSON. From another device add the header
+`X-Lumi-Token` with a paired device's token.
+
+**Lumi sending to your dashboard or another app:** add a connector in `config.json`:
+
+```json
+"connectors": [{
+  "name": "world_dashboard",
+  "description": "Updates the 3D world dashboard. Send {\"project\": name, \"percent\": number}",
+  "url": "http://127.0.0.1:5000/update",
+  "method": "POST"
+}]
+```
+
+Then say "update the world dashboard with Marina Tower progress". Lumi shows what it will
+send and waits for APPROVE. The description tells Lumi what your app expects, so write it
+to match your dashboard.
+
+Any program on the PC can already be opened or driven through commands, with your approval.
 
 ## Give it a name
 
@@ -132,26 +222,24 @@ Then ask "how many warnings are in my model?" The bridge is read-only.
 - Running commands and writing files always wait for your approval.
 - Anyone holding a paired phone can talk to the assistant, so pair only your own devices.
   To unpair everything, delete `data/devices.json`.
+- Email, Telegram and connector calls can carry your data outside the PC; each email and
+  connector call is shown to you first.
 - Your speech is turned into text by the browser (Chrome sends audio to Google for this),
   and the text goes to the Claude API.
 
 ## Not built yet
 
-- **Recognising only your voice** (speaker verification). It needs an audio model running on
-  the PC; today, access is protected by pairing instead.
-- The wake phrase works only while the page is open with `"HEY LUMI"` switched on, and the
-  browser sends the audio to its speech service while listening. A fully offline wake word that
-  runs in the background is not built.
+- WhatsApp (see the Telegram section for why).
+- A wake word that listens in the background with the page closed. "Hey Lumi" works while the
+  page is open and switched on.
+- Voice notes in Telegram, email attachments, calendar.
 - Loading your own Revit, Civil 3D or Navisworks model into hologram mode (it shows a sample
   building today).
-- Inbox handling, calendar and other app connections, and separate helper agents. Email will
-  be added only when you ask, and will act only with your approval.
-- Using the phone away from home Wi-Fi.
 - Operating the BIM software itself: changing the Revit model (the bridge only reads),
-  running Navisworks clash tests, ACC uploads and transmittals. Today it manages the process
-  and checklists and reads from Revit; it does not do the modelling work.
+  running Navisworks clash tests, ACC uploads. Lumi manages the process and checklists,
+  reads from Revit, and can run commands you approve.
 - Scanned PDFs (no text layer) and Excel requirement sheets cannot be read yet.
-- Controlling the phone itself (calls, messages, notifications).
+- Controlling the phone itself (calls, SMS, notifications).
 - A physical hologram: the display is a hologram-style screen. A fan or pyramid
   holographic display can show it as-is.
 

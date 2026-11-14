@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
@@ -29,10 +30,30 @@ class Config:
         "Unreal Engine"])
     # Programs the automatic search does not find: [{"name": "...", "executable": "C:/.../app.exe"}]
     extra_software: list[dict] = field(default_factory=list)
+    # Other applications Lumi may send data to, each call approved by you:
+    # [{"name": "world_dashboard", "description": "what to send", "url": "http://...", "method": "POST"}]
+    connectors: list[dict] = field(default_factory=list)
+    # Email (off until you turn it on). The password goes in secrets.env, never here.
+    email: dict = field(default_factory=lambda: {
+        "enabled": False, "address": "", "imap_host": "imap.gmail.com",
+        "smtp_host": "smtp.gmail.com", "smtp_port": 587, "ask_before_reading": True})
+    voice_lock: bool = True          # once a voice is enrolled, spoken commands need a recognised voice
+    voice_threshold: float = 0.6     # higher = stricter voice match
 
     @property
     def data_path(self) -> Path:
         return Path(self.data_dir).expanduser() if self.data_dir else DATA_DIR
+
+
+def load_secrets(path: Path | None = None) -> None:
+    """Read KEY=value lines from secrets.env into the environment (existing values win)."""
+    path = path or ROOT / "secrets.env"
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        key, sep, value = line.strip().partition("=")
+        if sep and key and not key.startswith("#"):
+            os.environ.setdefault(key.strip(), value.strip())
 
 
 def load_config(path: Path | None = None) -> Config:

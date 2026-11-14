@@ -10,6 +10,24 @@
   "revit_bridge_url": "http://127.0.0.1:48884/assistant",
   "currency": "INR",
   "data_dir": "",
-  "toolset": ["Autodesk Civil 3D", "Revit", "Navisworks", "AutoCAD (2D and 3D)", "AutoCAD Plant 3D", "Unreal Engine"],
-  "extra_software": []
+  "toolset": [
+    "Autodesk Civil 3D",
+    "Revit",
+    "Navisworks",
+    "AutoCAD (2D and 3D)",
+    "AutoCAD Plant 3D",
+    "Unreal Engine"
+  ],
+  "extra_software": [],
+  "connectors": [],
+  "email": {
+    "enabled": false,
+    "address": "",
+    "imap_host": "imap.gmail.com",
+    "smtp_host": "smtp.gmail.com",
+    "smtp_port": 587,
+    "ask_before_reading": true
+  },
+  "voice_lock": true,
+  "voice_threshold": 0.6
 }

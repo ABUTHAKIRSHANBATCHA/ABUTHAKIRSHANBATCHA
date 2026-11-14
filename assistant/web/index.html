@@ -102,11 +102,24 @@
     <p id="pair-urls" class="mono"></p>
     <p>Pairing PIN <b id="pair-pin" class="mono"></b></p>
   </section>
+  <button id="open-voice" class="ghost wide">VOICE LOCK</button>
   <button id="open-holo" class="ghost wide">HOLOGRAM MODE (CAMERA + HANDS)</button>
   <button id="open-data" class="ghost wide">TRACKING DASHBOARD</button>
   <button id="reset" class="ghost wide">START A NEW CONVERSATION</button>
   <button id="mute" class="ghost wide">VOICE REPLIES: ON</button>
   <button id="close-menu" class="wide">CLOSE</button>
+</dialog>
+
+<dialog id="voice">
+  <h2>VOICE LOCK</h2>
+  <p id="voice-status"></p>
+  <ul id="voice-list"></ul>
+  <form id="voice-form">
+    <input id="voice-name" placeholder="Name for this voice" maxlength="40" required>
+    <button type="submit" class="wide">ADD THIS VOICE (3 SAMPLES)</button>
+  </form>
+  <p id="voice-step" class="warn"></p>
+  <button id="close-voice" class="ghost wide">CLOSE</button>
 </dialog>
 
 <dialog id="confirm">
@@ -130,6 +143,7 @@
 </dialog>
 
 <script src="wake.js"></script>
+<script src="voice.js"></script>
 <script src="hologram.js"></script>
 <script src="gestures.js"></script>
 <script src="holo.js"></script>

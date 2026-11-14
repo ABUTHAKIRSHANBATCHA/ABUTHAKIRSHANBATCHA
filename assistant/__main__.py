@@ -15,7 +15,7 @@ import sys
 
 import uvicorn
 
-from .config import DATA_DIR, load_config
+from .config import DATA_DIR, load_config, load_secrets
 from .server import create_app, lan_addresses
 
 
@@ -55,6 +55,7 @@ def ensure_certificate(ips: list[str]) -> tuple[str, str]:
 
 
 async def serve() -> None:
+    load_secrets()
     cfg = load_config()
     app = create_app(cfg)
     ips = lan_addresses()
@@ -70,6 +71,10 @@ async def serve() -> None:
     for ip in ips:
         print(f"  On phone:   https://{ip}:{cfg.https_port}   (same Wi-Fi; accept the certificate warning once)")
     print(f"  Pairing PIN: {app.state.devices.pin}")
+    print(f"  Telegram:   {'on - send /pair <PIN> to your bot' if app.state.telegram else 'off'}")
+    print(f"  Email:      {'on (asks before each use)' if 'email_send' in brain.registry.tools else 'off'}")
+    voice = app.state.voice
+    print(f"  Voice lock: {'on, ' + str(len(voice.voices)) + ' voice(s)' if voice.locked else 'installed, no voice added yet' if voice.available else 'not installed'}")
     print("  Press Ctrl+C to stop.\n")
     await asyncio.gather(local.serve(), remote.serve())
 

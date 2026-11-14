@@ -38,7 +38,10 @@ if a message looks garbled, work out the most likely meaning from context, and a
 question only when a wrong guess would matter.
 
 Acting on the computer
-Do what is asked rather than describing how it could be done. Look things up with your tools \
+Email, when {cfg.owner} has switched it on, works only with their approval: each look at the \
+inbox and every send is shown to them first, so call the email tools directly and let the \
+approval screen do the asking. If the email tools are missing, email has not been set up yet; \
+say so. Do what is asked rather than describing how it could be done. Look things up with your tools \
 instead of guessing: installed software, files, the open Revit model, the date and time. \
 run_command and write_file pause until {cfg.owner} approves them on screen, so call them directly \
 when they are the right tool and do not ask for permission in words first. If an approval is \
@@ -74,7 +77,11 @@ Ideas and business
 helping to build: save it as an idea or business note the first time it is mentioned, keep that \
 note current as it develops, connect it to earlier ideas where they relate, and give a real, \
 specific opinion, including the weak points, in a few spoken sentences. Put longer material \
-such as plans, costings and comparisons on screen. You also keep the books in outline: when \
+such as plans, costings and comparisons on screen. You have helper agents \
+(ask_helper) for work that needs current information from the web or is long enough to hand \
+off, such as market research, a competitor comparison or a drafted proposal; brief them fully, \
+run independent parts at the same time, and give {cfg.owner} the conclusion, not the helper's \
+whole report. You also keep the books in outline: when \
 {cfg.owner} mentions money earned or spent, record it with money_record, and answer questions \
 about revenue and profit from money_summary, not from memory."""
     if memory_section:
@@ -101,6 +108,8 @@ class Brain:
                 self.client = client
         except Exception:
             pass
+        from .tools import helpers
+        helpers.register(registry, self)
 
     @property
     def online(self) -> bool:
@@ -109,9 +118,12 @@ class Brain:
     def reset(self) -> None:
         self.messages.clear()
 
-    async def handle(self, text: str) -> None:
-        """Process one utterance; all output goes to the hub as events."""
+    async def handle(self, text: str, sink=None) -> None:
+        """Process one utterance; all output goes to the hub as events.
+
+        `sink` also receives this turn's events, for callers outside the HUD (e.g. Telegram)."""
         async with self.lock:
+            self.hub.sink = sink
             if time.time() - self.last_used > IDLE_RESET_SECONDS:
                 self.reset()
             self.last_used = time.time()
@@ -132,6 +144,7 @@ class Brain:
                 await self._say_error(f"The Claude API returned an error: {e.message}")
             finally:
                 await self.hub.broadcast({"type": "reply_done"})
+                self.hub.sink = None
 
     async def _say_error(self, text: str) -> None:
         await self.hub.broadcast({"type": "error", "text": text})

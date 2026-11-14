@@ -83,7 +83,7 @@ class Registry:
 
 
 def build_registry(cfg, hub, memory, projects, ledger) -> Registry:
-    from . import bim, lifecycle, money, notes, system
+    from . import bim, connectors, email_tools, lifecycle, money, notes, system
 
     reg = Registry()
     system.register(reg, cfg, hub)
@@ -91,4 +91,6 @@ def build_registry(cfg, hub, memory, projects, ledger) -> Registry:
     lifecycle.register(reg, projects)
     notes.register(reg, memory)
     money.register(reg, ledger)
+    connectors.register(reg, cfg)
+    email_tools.register(reg, cfg)
     return reg
