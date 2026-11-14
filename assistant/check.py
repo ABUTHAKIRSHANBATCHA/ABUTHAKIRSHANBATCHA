@@ -49,8 +49,7 @@ def run(root: Path = ROOT, say=print) -> list[tuple[str, str, str]]:
                                         [{"role": "user", "content": "Reply with the single word: ready"}])
                 add(OK, "Brain", f"free model {cfg.free_model} answered: {(reply.get('content') or '').strip()[:40]!r}")
                 try:
-                    tool = [{"type": "function", "function": {"name": "get_time", "description": "Current time",
-                                                              "parameters": {"type": "object", "properties": {}}}}]
+                    tool = [{"type": "function", "function": {"name": "get_time", "description": "Current time"}}]
                     r = free_brain.chat(cfg.free_base_url, env("LUMI_FREE_API_KEY", ""), cfg.free_model,
                                         [{"role": "user", "content": "What time is it? Use the get_time tool."}], tool)
                     add(OK if r.get("tool_calls") else WARN, "Brain can use tools",

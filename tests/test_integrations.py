@@ -653,7 +653,11 @@ def test_free_brain_talks_uses_tools_and_asks_approval(tmp_path, monkeypatch, pr
     assert first["auth"] == "Bearer free-key" and first["model"] == "flash-free"
     assert first["messages"][0]["role"] == "system" and "Lumi" in first["messages"][0]["content"]
     names = [t["function"]["name"] for t in first["tools"]]
-    assert "file_to_project" in names and "additionalProperties" not in first["tools"][0]["function"]["parameters"]
+    by_name = {t["function"]["name"]: t["function"] for t in first["tools"]}
+    assert "file_to_project" in names and "parameters" not in by_name["get_system_status"]    # no empty objects
+    assert by_name["write_file"]["parameters"] == {
+        "type": "object", "properties": {"path": {"type": "string"}, "contents": {"type": "string"}},
+        "required": ["path", "contents"]}
     tool_msgs = [m for m in second["messages"] if m["role"] == "tool"]
     assert [m["tool_call_id"] for m in tool_msgs] == ["c1", "c2"] and "Wrote 2 characters" in tool_msgs[1]["content"]
     assert [t["text"] for t in brain.memory.transcript()] == ["save a note", "Saved your note."]
@@ -712,3 +716,24 @@ def test_installation_check_reports_each_part_without_secrets(tmp_path, provider
     assert rows["Watching: Gone"][0] == check.FAIL
     report = (tmp_path / "lumi-check.txt").read_text()
     assert "super-secret-key" not in report and "[OK  ] Brain:" in report and "1 problem(s)" in report
+
+
+def test_free_tool_format_and_bom_files(tmp_path):
+    schema = {"name": "use_connector", "description": "d", "input_schema": {
+        "type": "object", "required": ["name"], "additionalProperties": False,
+        "properties": {"name": {"type": "string"}, "data": {"type": "object", "description": "JSON to send"}}}}
+    fn = free_brain.to_function_tools([schema])[0]["function"]
+    assert fn["parameters"]["properties"]["data"] == {"type": "string", "description": "JSON to send Write this as JSON text."}
+    parse = free_brain.parse_arguments
+    assert parse('{"name": "d", "data": "{\\"percent\\": 26}"}', schema["input_schema"]) == {"name": "d", "data": {"percent": 26}}
+    assert parse({"name": "d"}, schema["input_schema"]) == {"name": "d"}             # already an object
+    assert parse("{broken", None) is None and parse("[1]", None) is None
+    assert parse('{"name": "d", "data": "not json"}', schema["input_schema"]) is None
+    assert parse("", None) == {}
+
+    from assistant.config import load_config
+    (tmp_path / "config.json").write_bytes(b"\xef\xbb\xbf" + json.dumps({"name": "Lumi", "http_port": 8766}).encode())
+    assert load_config(tmp_path / "config.json").http_port == 8766                   # saved by Notepad with a BOM
+    (tmp_path / "secrets.env").write_bytes(b"\xef\xbb\xbfLUMI_BOM_TEST=yes\n")
+    load_secrets(tmp_path / "secrets.env")
+    assert os.environ.pop("LUMI_BOM_TEST") == "yes"

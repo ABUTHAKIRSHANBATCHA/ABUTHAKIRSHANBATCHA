@@ -28,7 +28,7 @@ MAIL_HOSTS = {
 def read_env(path: Path) -> dict[str, str]:
     out = {}
     if path.exists():
-        for line in path.read_text(encoding="utf-8").splitlines():
+        for line in path.read_text(encoding="utf-8-sig").splitlines():
             key, sep, value = line.strip().partition("=")
             if sep and key and not key.startswith("#"):
                 out[key.strip()] = value.strip()
@@ -37,7 +37,7 @@ def read_env(path: Path) -> dict[str, str]:
 
 def run(root: Path = ROOT, ask=input, say=print, install_voice=None, list_models=None) -> None:
     config_file, secrets_file = root / "config.json", root / "secrets.env"
-    config = json.loads(config_file.read_text(encoding="utf-8")) if config_file.exists() else {}
+    config = json.loads(config_file.read_text(encoding="utf-8-sig")) if config_file.exists() else {}
     secrets = read_env(secrets_file)
     defaults = Config()
 

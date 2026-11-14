@@ -62,7 +62,7 @@ def load_secrets(path: Path | None = None) -> None:
     path = path or ROOT / "secrets.env"
     if not path.exists():
         return
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
         key, sep, value = line.strip().partition("=")
         if sep and key and not key.startswith("#"):
             os.environ.setdefault(key.strip(), value.strip())
@@ -72,7 +72,7 @@ def load_config(path: Path | None = None) -> Config:
     path = path or ROOT / "config.json"
     cfg = Config()
     if path.exists():
-        raw = json.loads(path.read_text(encoding="utf-8"))
+        raw = json.loads(path.read_text(encoding="utf-8-sig"))
         known = {f.name for f in fields(Config)}
         for key, value in raw.items():
             if key in known:

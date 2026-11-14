@@ -304,10 +304,10 @@ class Brain:
                 blocks = []
                 for call in calls:
                     fn = call.get("function") or {}
-                    try:
-                        args = json.loads(fn.get("arguments") or "{}")
-                    except ValueError:
-                        args = None                         # reported to the model by _run_tool's validation
+                    known = self.registry.tools.get(fn.get("name", ""))
+                    # None (unreadable arguments) is reported back to the model by _run_tool.
+                    args = free_brain.parse_arguments(fn.get("arguments"),
+                                                      known.schema()["input_schema"] if known else None)
                     blocks.append(SimpleNamespace(id=call.get("id") or uuid.uuid4().hex, name=fn.get("name", ""), input=args))
                 results = await asyncio.gather(*(self._run_tool(b) for b in blocks))
                 for block, result in zip(blocks, results):

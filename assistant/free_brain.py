@@ -72,8 +72,37 @@ def to_function_tools(schemas: list[dict]) -> list[dict]:
     """Lumi's tool definitions in the function-calling format these providers expect."""
     out = []
     for s in schemas:
-        params = dict(s["input_schema"])
-        params.pop("additionalProperties", None)       # not accepted by every provider
-        out.append({"type": "function", "function": {
-            "name": s["name"], "description": s["description"], "parameters": params}})
+        function = {"name": s["name"], "description": s["description"]}
+        properties = {}
+        for key, spec in s["input_schema"].get("properties", {}).items():
+            if spec.get("type") == "object" and not spec.get("properties"):
+                # A free-form object: ask for it as JSON text (see parse_arguments).
+                spec = {"type": "string", "description": (spec.get("description", "") + " Write this as JSON text.").strip()}
+            properties[key] = spec
+        if properties:                                  # tools without inputs send no parameters at all
+            function["parameters"] = {"type": "object", "properties": properties}
+            if s["input_schema"].get("required"):
+                function["parameters"]["required"] = s["input_schema"]["required"]
+        out.append({"type": "function", "function": function})
     return out
+
+
+def parse_arguments(raw: str | dict | None, schema: dict | None):
+    """Tool arguments from the model, with JSON-text objects turned back into objects.
+    Returns None when the arguments cannot be read."""
+    if isinstance(raw, dict):
+        args = raw                                      # some providers already send an object
+    else:
+        try:
+            args = json.loads(raw or "{}")
+        except ValueError:
+            return None
+    if not isinstance(args, dict):
+        return None
+    for key, spec in ((schema or {}).get("properties") or {}).items():
+        if spec.get("type") == "object" and isinstance(args.get(key), str):
+            try:
+                args[key] = json.loads(args[key])
+            except ValueError:
+                return None
+    return args
