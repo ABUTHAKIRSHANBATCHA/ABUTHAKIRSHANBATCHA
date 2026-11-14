@@ -1,5 +1,5 @@
 {
-  "name": "Assistant",
+  "name": "Lumi",
   "owner": "Boss",
   "model": "claude-opus-5-5",
   "effort": "medium",
@@ -8,6 +8,7 @@
   "default_language": "en-IN",
   "bim_search_roots": [],
   "revit_bridge_url": "http://127.0.0.1:48884/assistant",
+  "currency": "INR",
   "data_dir": "",
   "toolset": ["Autodesk Civil 3D", "Revit", "Navisworks", "AutoCAD (2D and 3D)", "AutoCAD Plant 3D", "Unreal Engine"],
   "extra_software": []

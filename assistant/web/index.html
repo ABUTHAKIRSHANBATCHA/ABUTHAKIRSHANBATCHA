@@ -38,6 +38,12 @@
     <div class="axis"><span id="req-from"></span><span>today</span></div>
   </section>
   <section>
+    <h2>INCOME, LAST 6 MONTHS</h2>
+    <div class="hero"><b id="money-total">0</b><span id="money-note">this month</span></div>
+    <div id="money-chart" class="bars" role="img" aria-label="Income per month"></div>
+    <div class="axis"><span id="money-from"></span><span>this month</span></div>
+  </section>
+  <section>
     <h2>MOST USED ACTIONS</h2>
     <div id="tools"><p class="empty">Nothing yet.</p></div>
   </section>
@@ -65,7 +71,7 @@
     <button type="submit" id="send" title="Send" aria-label="Send">&#10148;</button>
   </form>
   <div class="controls">
-    <button id="hands" class="ghost" title="Keep listening after each reply">HANDS-FREE</button>
+    <button id="hands" class="ghost" title="Keep listening and respond when you say the wake phrase">WAKE WORD</button>
     <button id="mic" aria-label="Talk"><svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V22h2v-3.1A7 7 0 0 0 19 12h-2Z"/></svg></button>
     <button id="more" class="ghost">MENU</button>
   </div>
@@ -107,6 +113,7 @@
   <p id="pair-error" class="warn"></p>
 </dialog>
 
+<script src="wake.js"></script>
 <script src="hologram.js"></script>
 <script src="app.js"></script>
 </body>

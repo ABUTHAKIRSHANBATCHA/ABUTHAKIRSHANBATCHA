@@ -74,7 +74,9 @@ Ideas and business
 helping to build: save it as an idea or business note the first time it is mentioned, keep that \
 note current as it develops, connect it to earlier ideas where they relate, and give a real, \
 specific opinion, including the weak points, in a few spoken sentences. Put longer material \
-such as plans, costings and comparisons on screen."""
+such as plans, costings and comparisons on screen. You also keep the books in outline: when \
+{cfg.owner} mentions money earned or spent, record it with money_record, and answer questions \
+about revenue and profit from money_summary, not from memory."""
     if memory_section:
         prompt += "\n\n" + memory_section
     return prompt

@@ -20,6 +20,7 @@ from .config import DATA_DIR, WEB_DIR, Config
 from .memory import Memory
 from .tools import build_registry
 from .tools.lifecycle import Projects
+from .tools.money import Ledger
 from .tools.system import system_stats
 
 LOOPBACK = {"127.0.0.1", "::1"}
@@ -117,10 +118,12 @@ def create_app(cfg: Config, devices: Devices | None = None) -> FastAPI:
     devices = devices or Devices()
     memory = Memory(cfg.data_path / "memory")
     projects = Projects(cfg.data_path / "projects")
-    brain = Brain(cfg, build_registry(cfg, hub, memory, projects), hub, memory)
+    ledger = Ledger(cfg.data_path / "money", cfg.currency)
+    brain = Brain(cfg, build_registry(cfg, hub, memory, projects, ledger), hub, memory)
 
     def dashboard() -> dict:
-        return {"type": "dashboard", "projects": projects.summary(), **memory.tracking()}
+        return {"type": "dashboard", "projects": projects.summary(), "money": ledger.dashboard(),
+                **memory.tracking()}
 
     async def answer(text: str) -> None:
         await brain.handle(text)

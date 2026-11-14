@@ -14,6 +14,8 @@
   let ws = null, retry = 1000;
   let lang = store.get("lang") || "en-IN";
   let handsFree = false, muted = store.get("muted") === "1";
+  let assistantName = "", tapped = false, followUntil = 0;   // wake-word state
+  const FOLLOW_UP_MS = 20000;
   let pendingSend = false, iAsked = false, replyText = "", speakBuffer = "";
   let recognition = null, listening = false, busy = false, speaking = 0;
   let pendingConfirm = null;
@@ -127,6 +129,17 @@
           el("b", { textContent: t.count }), el("div", null, fill)), `${prettyTool(t.name)}: used ${t.count} times in 14 days`);
       }));
     }
+    const money = d.money.months, now = money[money.length - 1];
+    const cash = (n) => `${Math.round(n).toLocaleString()} ${d.money.currency}`;
+    const top = Math.max(1, ...money.map((m) => m.income));
+    const monthName = (key) => new Date(key + "-01T00:00").toLocaleDateString([], { month: "short", year: "2-digit" });
+    $("money-total").textContent = cash(now.income);
+    $("money-note").textContent = `this month, ${cash(now.expense)} spent`;
+    $("money-from").textContent = monthName(money[0].month);
+    $("money-chart").replaceChildren(...money.map((m) => {
+      const bar = el("u"); bar.style.height = `${(m.income / top) * 100}%`;
+      return tipOn(el("i", null, bar), `${monthName(m.month)}: income ${cash(m.income)}, spent ${cash(m.expense)}, net ${cash(m.net)}`);
+    }));
     $("idea-count").textContent = d.idea_count || "";
     if (d.ideas.length) $("ideas").replaceChildren(...d.ideas.map((n) =>
       el("li", null, el("span", { textContent: n.title }), el("small", { textContent: prettyDay(n.updated) }))));
@@ -199,6 +212,22 @@
   function stopListening() { if (recognition) recognition.stop(); }
 
   function heard(text) {
+    const viaTap = tapped; tapped = false;
+    if (handsFree && !viaTap) {
+      // Wake-word mode: act only on "Hey <name> ...", or on a follow-up right after a reply.
+      const command = Wake.strip(text, assistantName);
+      if (command === null && Date.now() > followUntil) {
+        $("heard").textContent = `Say "Hey ${assistantName}" first`;
+        return;
+      }
+      if (command === "") {                    // just the wake phrase: acknowledge and wait
+        followUntil = Date.now() + FOLLOW_UP_MS; iAsked = true;
+        showReply(lang === "ta-IN" ? "சொல்லுங்கள்." : "Yes?");
+        speak(lang === "ta-IN" ? "சொல்லுங்கள்." : "Yes?");
+        return;
+      }
+      if (command !== null) text = command;
+    }
     if (pendingConfirm) {
       if (YES.test(text)) return answerConfirm(true);
       if (NO.test(text)) return answerConfirm(false);
@@ -224,7 +253,9 @@
 
   const handlers = {
     hello(e) {
+      assistantName = e.name;
       document.title = e.name; $("name").textContent = e.name.toUpperCase();
+      $("hands").textContent = `"HEY ${e.name.toUpperCase()}"`;
       setLink(e.online ? "ONLINE" : "BRAIN OFFLINE - NO API KEY", !e.online);
       if (!store.get("lang")) setLang(e.language);
       $("pair-info").hidden = !e.pairing;
@@ -241,7 +272,7 @@
     state() { busy = true; settle(); },
     delta(e) { replyText += e.text; showReply(replyText); speakStreamed(e.text); },
     error(e) { replyText = e.text; showReply(e.text, true); speak(e.text); },
-    reply_done() { busy = false; speak(speakBuffer); speakBuffer = ""; settle(); },
+    reply_done() { busy = false; followUntil = Date.now() + FOLLOW_UP_MS; speak(speakBuffer); speakBuffer = ""; settle(); },
     tool: logTool,
     dashboard: drawDashboard,
     card,
@@ -292,7 +323,7 @@
   });
   $("mic").onclick = () => {
     if (speaking > 0) { hush(); settle(); return; }      // tap to interrupt
-    if (listening) stopListening(); else startListening();
+    if (listening) stopListening(); else { tapped = true; startListening(); }
   };
   $("lang").onclick = () => setLang(lang === "ta-IN" ? "en-IN" : "ta-IN");
   $("hands").onclick = () => {

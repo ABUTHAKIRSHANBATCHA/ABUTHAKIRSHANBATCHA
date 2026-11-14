@@ -1,8 +1,8 @@
-# Personal AI Assistant
+# Lumi - Personal AI Assistant
 
 A voice assistant that runs on your own Windows PC, controls it, knows your BIM tools,
 speaks English and Tamil, and shows a holographic display on the PC and on your phone.
-The name is a setting, so you can choose it later.
+It is called Lumi; the name is a setting you can change.
 
 ## What it does today
 
@@ -17,6 +17,8 @@ The name is a setting, so you can choose it later.
 | Permanent memory: every conversation is stored on your PC and searchable; notes on you, your projects and your ideas carry into every new conversation | Working (the assistant deciding what to save needs the Claude brain) |
 | BIM project checklists from client requirements review and pre-appointment BEP to handover (ISO 19650), plus the client's own requirements read from PDF / Word documents | Working (reading and breaking down an EIR needs the Claude brain) |
 | Tracking dashboard: project progress by stage, requests per day, most used actions, saved ideas (right side on PC; MENU > TRACKING DASHBOARD on phone) | Working |
+| Wake phrase: press `"HEY LUMI"`, then say "Hey Lumi, ..." to give a command; follow-ups within 20 seconds need no wake phrase | Logic tested with a simulated microphone; not yet tried with a real one |
+| Money tracking: record income and expenses per business by voice; income chart on the dashboard | Working (recording by voice needs the Claude brain) |
 | Find installed BIM software, launch it, find model files (.rvt .nwd .ifc .dwg ...) | Written for Windows; not yet run on a Windows PC |
 | Live Revit model queries (model info, element counts, warnings, levels, sheets, links) | Written; not yet run inside Revit |
 | Brain (Claude) | Needs your API key; without one it only opens things and reports status |
@@ -28,8 +30,8 @@ The name is a setting, so you can choose it later.
    `setx ANTHROPIC_API_KEY "your-key"` (then open a new terminal).
 3. Double-click `start.bat`. The HUD opens at <http://127.0.0.1:8765>.
 
-Use Chrome or Edge. Tap the mic (or press Space) and talk. `HANDS-FREE` keeps listening
-after each reply. Tap the mic while it is speaking to interrupt.
+Use Chrome or Edge. Tap the mic (or press Space) and talk. Press `"HEY LUMI"` to keep it
+listening: it then acts only when you start with "Hey Lumi" (or "ஹே லூமி"). Tap the mic while it is speaking to interrupt.
 
 ## Connect your phone
 
@@ -47,7 +49,7 @@ private networks.
 Copy `config.example.json` to `config.json` and edit:
 
 ```json
-{ "name": "Jarvis", "owner": "Abu" }
+{ "name": "Lumi", "owner": "Abu" }
 ```
 
 Other settings: `model`, `effort` (`low` is faster, `high` is smarter),
@@ -117,8 +119,12 @@ Then ask "how many warnings are in my model?" The bridge is read-only.
 
 ## Not built yet
 
-- **Recognising only your voice** (speaker verification) and a wake word ("Hey ...").
-  Both need an audio model running on the PC; today, access is protected by pairing instead.
+- **Recognising only your voice** (speaker verification). It needs an audio model running on
+  the PC; today, access is protected by pairing instead.
+- The wake phrase works only while the page is open with `"HEY LUMI"` switched on, and the
+  browser sends the audio to its speech service while listening. A fully offline wake word that
+  runs in the background is not built.
+- Inbox handling, calendar and other app connections, and separate helper agents.
 - Using the phone away from home Wi-Fi.
 - Operating the BIM software itself: changing the Revit model (the bridge only reads),
   running Navisworks clash tests, ACC uploads and transmittals. Today it manages the process

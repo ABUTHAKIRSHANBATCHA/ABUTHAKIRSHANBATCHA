@@ -12,7 +12,7 @@ WEB_DIR = Path(__file__).resolve().parent / "web"
 
 @dataclass
 class Config:
-    name: str = "Assistant"          # shown on the HUD and used as the wake word
+    name: str = "Lumi"               # shown on the HUD; "Hey <name>" wakes it in wake-word mode
     owner: str = "Boss"              # how the assistant addresses you
     model: str = "claude-opus-5-5"
     effort: str = "medium"           # low | medium | high | xhigh | max
@@ -21,6 +21,7 @@ class Config:
     default_language: str = "en-IN"  # en-IN or ta-IN
     bim_search_roots: list[str] = field(default_factory=list)
     revit_bridge_url: str = "http://127.0.0.1:48884/assistant"
+    currency: str = "INR"            # used for money tracking
     data_dir: str = ""               # where memory and projects are stored; default: ./data
     # The software you work in. Add to this list as your toolset grows.
     toolset: list[str] = field(default_factory=lambda: [

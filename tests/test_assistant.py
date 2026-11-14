@@ -14,6 +14,7 @@ from assistant.server import Devices, create_app
 from assistant.tools import build_registry
 from assistant.tools import bim
 from assistant.tools.lifecycle import STAGES, TEMPLATE, Projects
+from assistant.tools.money import Ledger
 
 
 @pytest.fixture
@@ -342,3 +343,22 @@ def test_dashboard_is_sent_on_connect_and_after_each_reply(app, tmp_path):
     assert after["projects"][0]["name"] == "Marina Tower" and len(after["projects"][0]["stages"]) == 7
     assert after["tools"] == [{"name": "bim_project_create", "count": 1}]
     assert after["requests"][-1]["count"] == 1
+
+
+def test_money_ledger(tmp_path):
+    import datetime as dt
+    ledger = Ledger(tmp_path, "INR")
+    assert "Recorded income of 50,000.00 INR for BIM Audits on 2026-11-03" in ledger.record(
+        "income", 50000, "Audit for ABC", "BIM Audits", "2026-11-03")
+    ledger.record("expense", 12000.5, "Software licence", "BIM Audits", "2026-11-05")
+    ledger.record("income", 8000, "Training", "Training", "2026-10-20")
+    ledger.record("income", 999, "old", "Training", "2025-01-01")
+    assert "greater than zero" in ledger.record("income", 0, "x")
+    assert "YYYY-MM-DD" in ledger.record("income", 5, "x", date="3 Nov")
+
+    months = Ledger(tmp_path, "INR").months(6, today=dt.date(2026, 11, 14))     # reloads from disk
+    assert [m["month"] for m in months] == ["2026-06", "2026-07", "2026-08", "2026-09", "2026-10", "2026-11"]
+    assert months[-1] == {"month": "2026-11", "income": 50000.0, "expense": 12000.5, "net": 37999.5}
+    assert months[-2]["income"] == 8000.0 and months[0]["income"] == 0.0
+    assert ledger.months(2, "training", today=dt.date(2026, 11, 14))[0]["income"] == 8000.0
+    assert ledger.months(2, today=dt.date(2026, 1, 10))[0]["month"] == "2025-12"   # year rollover
