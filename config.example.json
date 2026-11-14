@@ -66,5 +66,7 @@
     "07_Reports",
     "08_Handover",
     "99_Incoming"
-  ]
+  ],
+  "tower_root": "",
+  "tower_db": ""
 }

@@ -87,7 +87,11 @@ section[hidden] { display: none; }
 #voice-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px;
   padding: 6px 0; border-bottom: 1px solid var(--holo-faint); font-size: .95rem; }
 #voice-list button { padding: 5px 10px; font-size: .68rem; }
-#voice-form { display: flex; flex-direction: column; }
+#voice-form, #upload-form { display: flex; flex-direction: column; gap: 8px; }
+#upload-file { padding: 9px; }
+#tower .project header small { margin: 0; letter-spacing: .04em; font-family: var(--mono); display: inline; color: rgba(217, 248, 255, .6); }
+#tower-waiting { list-style: none; padding: 0; }
+#tower-waiting li { font-size: .78rem; border-left: 2px solid var(--warn); padding-left: 8px; margin-top: 6px; overflow-wrap: anywhere; }
 #open-data, #close-data { display: none; }
 h2 { font-size: .72rem; letter-spacing: .34em; color: var(--holo-dim); font-weight: 500; margin-bottom: 10px; }
 h3 { font-size: .68rem; letter-spacing: .26em; color: var(--holo-dim); font-weight: 500; margin-bottom: 6px; }
@@ -206,3 +210,8 @@ pre { font-family: var(--mono); font-size: .82rem; background: rgba(0, 0, 0, .45
 body.holo-on footer { z-index: 4; }
 body.holo-on main { z-index: 4; pointer-events: none; }
 body.holo-on #state-label { visibility: hidden; }
+
+/* Long replies must never cover the controls: keep the text inside its own area and scroll it. */
+main { overflow: hidden; pointer-events: none; }
+#reply { pointer-events: auto; flex: 0 1 auto; min-height: 0; }
+#heard { flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }

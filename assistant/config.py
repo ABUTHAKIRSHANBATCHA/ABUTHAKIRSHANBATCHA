@@ -34,6 +34,16 @@ class Config:
     currency: str = "INR"            # used for money tracking
     data_dir: str = ""               # where memory and projects are stored; default: ./data
     # The software you work in. Add to this list as your toolset grows.
+    # Project Control Tower: the master folder (e.g. "D:/PROJECT_CONTROL_TOWER") and its database.
+    # Leave tower_db empty for a built-in database file, or give a PostgreSQL address such as
+    # "postgresql+psycopg://lumi@localhost:5432/tower" (its password goes in secrets.env as LUMI_TOWER_DB_PASSWORD).
+    tower_root: str = ""
+    tower_db: str = ""
+    tower_projects: list[dict] = field(default_factory=lambda: [
+        {"name": "Qiddiya", "code": "QIDDIYA", "aliases": ["QID"], "areas": [["EV", "East Village"]]},
+        {"name": "KSU", "code": "KSU", "aliases": ["King Saud University"]},
+        {"name": "Mishraq", "code": "MISHRAQ", "aliases": ["MSQ"]},
+        {"name": "Solution Valley", "code": "SOLUTION_VALLEY", "aliases": ["SV"]}])
     # Where your project folders live, and the subfolders every new project gets.
     projects_root: str = ""
     folder_template: list[str] = field(default_factory=lambda: [

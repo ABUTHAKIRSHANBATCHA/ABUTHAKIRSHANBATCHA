@@ -177,6 +177,58 @@ Lumi hands bigger jobs to helpers and gives you the conclusion:
 
 Try: "research the BIM audit market in Dubai and tell me if it is worth starting".
 
+## Project Control Tower
+
+The permanent record for all your projects. Give its folder in `setup.bat`
+(for example `D:\PROJECT_CONTROL_TOWER`) and Lumi creates the master structure, the starting
+projects (Qiddiya, KSU, Mishraq, Solution Valley) and a database. When the tower is on it
+replaces the simple filing described in the next section.
+
+**Uploading from the phone:** MENU > UPLOAD A FILE TO A PROJECT (or send the file on Telegram),
+with a note such as "Qiddiya East Village electrical, Rev 04, Code C".
+
+- The file first goes to an isolated inbox and is checked (type, size, not empty, not a program,
+  really the kind of file its name says).
+- Lumi reads the project, area, discipline, drawing number and revision from the file name and
+  your note. A name like `QID-EV-ELE-001-REV04.pdf` is enough on its own.
+- If everything is certain it is filed under
+  `02_PROJECTS/<PROJECT>/01_DRAWINGS/<AREA>/<DISCIPLINE>/DESIGN|SHOP_DRAWINGS/CURRENT`, the previous
+  revision moves to `SUPERSEDED_REVISIONS`, and the registers are updated.
+- If anything is uncertain, or the file name and your note disagree, the file waits in
+  `04_NEEDS_CONFIRMATION` and Lumi asks. It is never filed on a guess.
+- Nothing is overwritten or deleted. The same file sent twice is recognised by its content.
+- Other documents (transmittals, CRS, clash reports, RFIs, minutes, datasheets, Revit, Navisworks
+  and IFC models) go to their own folders when your note or the file type says what they are.
+
+**Talking to it:**
+- "Create a new project named Project ABC." (asks first if a similar project exists)
+- "The Qiddiya East Village CCTV shop drawing received Code C; cable sizing is pending with the
+  subcontractor." (records the response and adds a coordination action)
+- "Record three hours for Qiddiya East Village electrical coordination on 14 November 2026."
+- "Change timesheet entry 12 to two hours." / "Export this month's timesheet."
+- "What is overdue on KSU?"
+
+**Registers:** drawing register, revision history, submission history, consultant responses,
+coordination actions and timesheets live in the database. An Excel copy per project is rewritten
+after every change in `02_PROJECTS/<PROJECT>/09_LOGS_AND_REGISTERS`; do not edit that copy, tell
+Lumi instead. Every operation is written to an audit log.
+
+**For your own dashboard:** `GET /api/tower/overview` and `GET /api/tower/project/<CODE>` return the
+registers as JSON; each drawing carries a time-limited link (`/api/tower/file/<token>`) that opens
+the PDF or downloads the native file. No Windows path is given to the browser.
+
+**Database:** by default a built-in database file inside the tower folder. For PostgreSQL set
+`"tower_db": "postgresql+psycopg://lumi@localhost:5432/tower"` in `config.json` and put the
+password in `secrets.env` as `LUMI_TOWER_DB_PASSWORD`. The database must use UTF-8.
+
+**Starting projects and their short codes** are in `tower_projects` in `config.json`
+(QID, KSU, MSQ, SV are my assumptions; change them to the codes in your drawing numbers before
+first start, or tell Lumi to create the projects you need).
+
+Not built yet in the tower: the n8n workflows, your PROJECTVERSE 3D dashboard as the front end,
+transcribing voice recordings sent as files, datasheet and meeting registers by voice, the
+management summary report, and the cloud queue for uploads while the PC is off.
+
 ## Send files from your phone and have them filed
 
 Set your projects folder in `setup.bat` (the folder that holds one folder per project).

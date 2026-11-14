@@ -52,6 +52,7 @@ class TelegramBridge:
     def __init__(self, api, brain, hub, devices, store: Path, after_turn=None, inbox: Path | None = None) -> None:
         self.api, self.brain, self.hub, self.devices = api, brain, hub, devices
         self.inbox = inbox or store.parent / "inbox"
+        self.upload = None        # set when the Project Control Tower handles incoming files
         self.store, self.after_turn = store, after_turn
         self.chats: list[int] = json.loads(store.read_text()) if store.exists() else []
         self.offset = 0
@@ -110,6 +111,10 @@ class TelegramBridge:
             data = await asyncio.to_thread(self.api.download, info["result"]["file_path"])
         except Exception as e:
             await self.send(chat, f"I could not download {name}: {e}")
+            return
+        if self.upload:                                              # the tower files it or asks what is missing
+            result = await self.upload(name, data, (message.get("caption") or "").strip())
+            await self.send(chat, result["said"])
             return
         self.inbox.mkdir(parents=True, exist_ok=True)
         safe = "".join(c if c.isalnum() or c in " ._-()" else "_" for c in name).strip(" .") or "file"

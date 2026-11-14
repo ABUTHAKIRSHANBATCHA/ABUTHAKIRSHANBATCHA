@@ -32,7 +32,7 @@ def run(root: Path = ROOT, say=print) -> list[tuple[str, str, str]]:
     # Basics
     v = sys.version_info
     add(OK if v >= (3, 10) else FAIL, "Python", f"{v.major}.{v.minor}.{v.micro} on {platform.system()} {platform.release()}")
-    missing = [m for m in ("anthropic", "fastapi", "uvicorn", "psutil", "cryptography", "pypdf", "docx")
+    missing = [m for m in ("anthropic", "fastapi", "uvicorn", "psutil", "cryptography", "pypdf", "docx", "sqlalchemy", "openpyxl")
                if not _has(m)]
     add(FAIL if missing else OK, "Packages", f"missing: {', '.join(missing)} - run setup.bat" if missing else "all installed")
     add(OK if (root / "config.json").exists() else WARN, "Settings file",
@@ -124,6 +124,18 @@ def run(root: Path = ROOT, say=print) -> list[tuple[str, str, str]]:
             f"{p} ({sum(1 for x in p.iterdir() if x.is_dir())} project folders)" if p.is_dir() else f"{p} does not exist")
     else:
         add(WARN, "Projects folder", "not set - files sent from the phone cannot be filed until it is (setup.bat)")
+    if cfg.tower_root:
+        try:
+            from .tower.service import Tower
+            t = Tower(Path(os.path.expandvars(cfg.tower_root)).expanduser(), cfg.tower_db, owner=cfg.owner)
+            names = [p["code"] for p in t.overview()]
+            add(OK, "Project Control Tower", f"{cfg.tower_root}: {len(names)} projects ({', '.join(names[:8]) or 'none yet'}); "
+                f"database: {t.engine.name}; {len(t.pending_uploads())} upload(s) waiting")
+            t.engine.dispose()
+        except Exception as e:
+            add(FAIL, "Project Control Tower", f"could not open {cfg.tower_root}: {str(e)[:150]}")
+    else:
+        add(OFF, "Project Control Tower", "not set up (run setup.bat and give its folder)")
     for w in cfg.watch:
         p = Path(os.path.expandvars(w["path"])).expanduser()
         add(OK if p.exists() else FAIL, f"Watching: {w['name']}", str(p) if p.exists() else f"{p} does not exist")

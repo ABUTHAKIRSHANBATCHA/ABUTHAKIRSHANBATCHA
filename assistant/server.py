@@ -23,7 +23,8 @@ from .config import DATA_DIR, WEB_DIR, Config
 from .memory import Memory
 from .tasks import Tasks
 from .watcher import Watcher
-from .tools import autonomy, connectors, filing as filing_tools
+from .tools import autonomy, connectors, filing as filing_tools, tower_tools
+from .tower.service import Tower, TowerError
 from .telegram import TelegramBridge, http_api
 from .voice_id import VoiceID
 from pathlib import Path
@@ -144,7 +145,18 @@ def create_app(cfg: Config, devices: Devices | None = None, telegram_api=None) -
     ledger = Ledger(cfg.data_path / "money", cfg.currency)
     brain = Brain(cfg, build_registry(cfg, hub, memory, projects, ledger), hub, memory)
     filing = filing_tools.Filing(cfg.projects_root, cfg.folder_template, cfg.data_path / "inbox")
-    filing_tools.register(brain.registry, filing)
+    tower = None
+    if cfg.tower_root:
+        # The Project Control Tower replaces simple filing: one filing system, not two.
+        db_url = cfg.tower_db
+        password = os.environ.get("LUMI_TOWER_DB_PASSWORD", "")
+        if password and "@" in db_url and ":" not in db_url.split("//", 1)[1].split("@", 1)[0]:
+            db_url = db_url.replace("@", f":{password}@", 1)
+        tower = Tower(Path(os.path.expandvars(cfg.tower_root)).expanduser(), db_url, owner=cfg.owner)
+        tower.seed_projects(cfg.tower_projects)
+        tower_tools.register(brain.registry, tower)
+    else:
+        filing_tools.register(brain.registry, filing)
     watched = list(cfg.watch)
     if cfg.projects_root and not any(w.get("path") == cfg.projects_root for w in watched):
         watched.append({"name": "Projects", "path": cfg.projects_root, "kind": "folder"})   # dashboards follow filing
@@ -152,8 +164,12 @@ def create_app(cfg: Config, devices: Devices | None = None, telegram_api=None) -
     tasks = Tasks(cfg.data_path / "tasks.json")
 
     def dashboard() -> dict:
-        return {"type": "dashboard", "projects": projects.summary(), "money": ledger.dashboard(),
+        data = {"type": "dashboard", "projects": projects.summary(), "money": ledger.dashboard(),
                 "watch": watcher.summary(), "tasks": tasks.summary(), **memory.tracking()}
+        if tower:
+            data["tower"] = {"projects": tower.overview(), "waiting": tower.pending_uploads(),
+                             "uploads": tower.upload_history(6)}
+        return data
 
     async def answer(text: str) -> None:
         await brain.handle(text)
@@ -173,6 +189,8 @@ def create_app(cfg: Config, devices: Devices | None = None, telegram_api=None) -
         telegram_api = http_api(os.environ["LUMI_TELEGRAM_TOKEN"])
     telegram = TelegramBridge(telegram_api, brain, hub, devices, cfg.data_path / "telegram.json",
                               after_turn=refresh, inbox=filing.inbox) if telegram_api else None
+    if telegram and tower:
+        telegram.upload = lambda name, data, note: take_upload(name, data, note, "telegram")
 
     async def notify(text: str) -> str:
         """Reach the owner wherever they are: every screen, and the phone through Telegram."""
@@ -259,7 +277,7 @@ def create_app(cfg: Config, devices: Devices | None = None, telegram_api=None) -
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.hub, app.state.devices, app.state.brain = hub, devices, brain
     app.state.voice, app.state.telegram = voice, telegram
-    app.state.tasks, app.state.watcher = tasks, watcher
+    app.state.tasks, app.state.watcher, app.state.tower = tasks, watcher, tower
     app.state.run_task, app.state.watch_once = run_task, watch_once
 
     def is_local(scope) -> bool:
@@ -295,6 +313,52 @@ def create_app(cfg: Config, devices: Devices | None = None, telegram_api=None) -
         """Everything on the tracking dashboard as JSON, for your own dashboards to read."""
         trusted(request)
         return dashboard()
+
+    # ---- Project Control Tower
+
+    def need_tower() -> Tower:
+        if tower is None:
+            raise HTTPException(404, "The Project Control Tower is not set up. Run setup.bat.")
+        return tower
+
+    async def take_upload(name: str, data: bytes, note: str, source: str) -> dict:
+        """Receive a file from the phone or the screen, file it or hold it, and tell everyone."""
+        result = await asyncio.to_thread(need_tower().receive_upload, name, data, note, source)
+        said = result.get("message") or result.get("question") or f"The upload was rejected: {result.get('reason')}"
+        await brain.note(f"I uploaded the file \"{name}\"" + (f" with this note: {note}" if note else " with no note") + ".", said)
+        await hub.broadcast({"type": "card", "title": "Upload " + result["status"].replace("_", " "), "text": said, "url": ""})
+        await refresh()
+        return {**result, "said": said}
+
+    @app.post("/api/tower/upload")
+    async def tower_upload(request: Request, name: str, note: str = ""):
+        trusted(request)
+        return await take_upload(name, await request.body(), note, "mobile" if not is_local(request.scope) else "pc")
+
+    @app.get("/api/tower/overview")
+    async def tower_overview(request: Request):
+        trusted(request)
+        t = need_tower()
+        return {"projects": t.overview(), "waiting": t.pending_uploads(), "uploads": t.upload_history(20)}
+
+    @app.get("/api/tower/project/{code}")
+    async def tower_project(request: Request, code: str):
+        trusted(request)
+        try:
+            return need_tower().project_detail(code)
+        except TowerError as e:
+            raise HTTPException(404, str(e))
+
+    @app.get("/api/tower/file/{token}")
+    async def tower_file(token: str):
+        """Open one registered file. The time-limited signed token is the permission; the browser
+        never sees or chooses a Windows path."""
+        try:
+            path, name = need_tower().open_link(token)
+        except TowerError as e:
+            raise HTTPException(403, str(e))
+        inline = path.suffix.lower() in (".pdf", ".png", ".jpg", ".jpeg", ".txt")
+        return FileResponse(path, filename=name, content_disposition_type="inline" if inline else "attachment")
 
     @app.get("/api/voice")
     async def voice_info(request: Request):

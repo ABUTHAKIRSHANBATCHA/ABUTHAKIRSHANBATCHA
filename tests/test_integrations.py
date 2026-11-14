@@ -343,7 +343,7 @@ def test_voice_lock_is_inactive_without_the_model(tmp_path, monkeypatch):
 
 def test_setup_wizard_writes_config_and_secrets(tmp_path, monkeypatch):
     answers = iter(["Lumi", "Abu", "AED", "", "", "y", "sk-test-key", "", "y", "abu@gmail.com", "", "", "mail-pass",
-                    "D:/Projects", "D:/Projects/Marina", "", "y"])
+                    "D:/Projects", "D:/Projects/Marina", "", "D:/PROJECT_CONTROL_TOWER", "y"])
     said, installed = [], []
     setup_wizard.run(tmp_path, ask=lambda _: next(answers), say=said.append,
                      install_voice=lambda model, say: installed.append(model), list_models=lambda url, key: [])
@@ -354,7 +354,7 @@ def test_setup_wizard_writes_config_and_secrets(tmp_path, monkeypatch):
     assert "ANTHROPIC_API_KEY=sk-test-key" in secrets and "LUMI_EMAIL_PASSWORD=mail-pass" in secrets
     assert "LUMI_TELEGRAM_TOKEN" not in secrets and "mail-pass" not in (tmp_path / "config.json").read_text()
     assert installed == [tmp_path / "data" / "voice" / MODEL_NAME]
-    assert config["projects_root"] == "D:/Projects"
+    assert config["projects_root"] == "D:/Projects" and config["tower_root"] == "D:/PROJECT_CONTROL_TOWER"
     assert config["watch"] == [{"name": "Marina", "path": "D:/Projects/Marina", "kind": "folder"}]
 
     # Running it again and pressing Enter keeps every answer.
@@ -684,7 +684,7 @@ def test_setup_configures_several_free_brains(tmp_path, provider, monkeypatch):
     listed = {"gemini": ["flash-free", "pro-paid"], "groq": ["fast-70b"], "ollama": ["qwen3:8b"]}
     lister = lambda url, key: listed[url.rsplit("/", 1)[1]]
     #          name owner curr  gemini key+model      groq key+model       ollama model  first    claude  tg  email  proj watch log voice
-    answers = iter(["", "Abu", "", "g-key", "flash-free", "q-key", "fast-70b", "qwen3:8b", "groq", "",    "", "n",   "",  "",   "", "n"])
+    answers = iter(["", "Abu", "", "g-key", "flash-free", "q-key", "fast-70b", "qwen3:8b", "groq", "",    "", "n",   "",  "",   "", "", "n"])
     said = []
     setup_wizard.run(tmp_path, ask=lambda _: next(answers), say=said.append, list_models=lister)
     config = json.loads((tmp_path / "config.json").read_text())

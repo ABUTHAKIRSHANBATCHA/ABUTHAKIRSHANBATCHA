@@ -141,6 +141,13 @@
       const bar = el("u"); bar.style.height = `${(m.income / top) * 100}%`;
       return tipOn(el("i", null, bar), `${monthName(m.month)}: income ${cash(m.income)}, spent ${cash(m.expense)}, net ${cash(m.net)}`);
     }));
+    $("tower-section").hidden = !d.tower; $("open-upload").hidden = !d.tower;
+    if (d.tower) {
+      $("tower").replaceChildren(...d.tower.projects.map((p) => el("div", { className: "project" },
+        el("header", null, el("span", { textContent: p.name }),
+          el("small", { textContent: `${p.drawings} dwg · ${p.open_actions} open${p.overdue_actions ? " · " + p.overdue_actions + " overdue" : ""}` })))));
+      $("tower-waiting").replaceChildren(...d.tower.waiting.map((w) => el("li", { textContent: w.question })));
+    }
     $("watch-section").hidden = !d.watch.sources.length;
     $("watch").replaceChildren(...(d.watch.events.length ? d.watch.events : [{ at: "", source: "Watching", kind: "", detail:
       d.watch.sources.map((s) => s.name).join(", ") + " - no changes yet" }]).map((e) =>
@@ -394,6 +401,21 @@
       return el("li", null, el("span", { textContent: `${v.name} (${v.samples} samples)` }), remove);
     }));
   }
+  $("open-upload").onclick = () => { $("menu").close(); $("upload-result").textContent = ""; $("upload").showModal(); };
+  $("close-upload").onclick = () => $("upload").close();
+  $("upload-form").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const file = $("upload-file").files[0], out = $("upload-result");
+    if (!file) return;
+    out.textContent = `Sending ${file.name} ...`;
+    try {
+      const res = await fetch(`api/tower/upload?name=${encodeURIComponent(file.name)}&note=${encodeURIComponent($("upload-note").value)}`,
+        { method: "POST", body: file, headers: { "X-Lumi-Token": store.get("token") || "" } });
+      const data = await res.json();
+      out.textContent = res.ok ? data.said : (data.detail || "The upload failed.");
+      if (res.ok) { $("upload-form").reset(); showReply(data.said); }
+    } catch { out.textContent = "The upload did not reach the PC. Check the connection and try again."; }
+  });
   $("open-voice").onclick = () => { $("menu").close(); $("voice-step").textContent = ""; $("voice").showModal(); showVoices(); };
   $("close-voice").onclick = () => $("voice").close();
   $("voice-form").addEventListener("submit", async (ev) => {

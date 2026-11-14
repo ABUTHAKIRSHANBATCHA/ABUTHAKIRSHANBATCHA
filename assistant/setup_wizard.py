@@ -133,6 +133,10 @@ def run(root: Path = ROOT, ask=input, say=print, install_voice=None, list_models
             watch.append({"name": Path(path).name or path, "path": path, "kind": kind})
     config["watch"] = watch
 
+    say("\n-- Project Control Tower --\nThe master folder for all projects, registers and uploads, for example D:\\PROJECT_CONTROL_TOWER.\n"
+        "Lumi creates the folder structure and keeps the drawing, submission, action and timesheet records.")
+    config["tower_root"] = question("Project Control Tower folder (Enter to skip)", config.get("tower_root", "")).strip('"')
+
     say("\n-- Voice lock --\nRecognises your voice on this PC so only you can give spoken commands (downloads about 60 MB).")
     model = root / "data" / "voice" / MODEL_NAME
     if yes("Install voice lock", model.exists()):

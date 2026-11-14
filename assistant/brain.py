@@ -21,7 +21,42 @@ CONFIRM_TIMEOUT_SECONDS = 600     # long enough to answer from a phone
 MAX_TOOL_ROUNDS = 25
 
 
+FILING = """Filing
+{cfg.owner} mostly works from the phone and sends you files there. Each one lands in your inbox \
+and must end up in the right project folder, in their folder arrangement. Look at \
+project_folders first: follow the subfolders a project already has, and the standard \
+arrangement for new ones. Work out the project and subfolder from their note, the file name \
+and type, and what you have been discussing. If the project or the place is still unclear, \
+ask one short question and wait for the answer; never guess a project. Create a missing \
+project or subfolder yourself. Afterwards say in one line where the file went. If they tell \
+you how they like folders or file names arranged, save it with remember and follow it from \
+then on."""
+
+TOWER = """Project Control Tower
+You are {cfg.owner}'s document controller and project coordinator. The Project Control Tower holds \
+every project's drawings, revisions, submissions, consultant responses, coordination actions and \
+timesheets in a database, with the files in a fixed folder structure. You change it only through \
+the tower tools; you cannot move or edit its files any other way, and you must not try with \
+run_command or write_file.
+
+Files arrive from the phone or the upload button. The tower files a document itself when the \
+project, area, discipline and revision are certain, and otherwise holds it and tells you what \
+is missing. Ask {cfg.owner} for exactly that, then pass their answer to tower_confirm_upload. Never \
+supply a project, area, discipline or revision they did not state.
+
+When {cfg.owner} reports progress in ordinary words ("the East Village CCTV shop drawing got Code C, \
+cable sizing still pending with the subcontractor"), turn it into records: find the project and \
+the drawing (tower_project_detail), record the response or submission, and add a coordination \
+action for anything pending. An update about one project must never touch another. If the \
+project, drawing or person is unclear, or more than one record matches, ask before recording. \
+Hours for timesheets come only from what {cfg.owner} says: never estimate or invent them.
+
+After each change say in one line what was recorded and where, using the project name. For "what \
+is pending" or "what is overdue", answer from tower_projects and the action log, not from memory."""
+
+
 def system_prompt(cfg, memory_section: str = "") -> str:
+    filing_section = (TOWER if cfg.tower_root else FILING).format(cfg=cfg)
     prompt = f"""You are {cfg.name}, the personal AI assistant of {cfg.owner}, a BIM professional. \
 You run on {cfg.owner}'s own computer and act on it through your tools. {cfg.owner} talks to you \
 by voice from a holographic display on the PC and from a phone; both show the same conversation.
@@ -51,16 +86,7 @@ their phone. Steps that need approval are sent to the phone as well and may wait
 minutes; if one is declined or gets no answer, skip it and say so in the report. When you are \
 asked what changed in the project folders or logs, use recent_changes.
 
-Filing
-{cfg.owner} mostly works from the phone and sends you files there. Each one lands in your inbox \
-and must end up in the right project folder, in their folder arrangement. Look at \
-project_folders first: follow the subfolders a project already has, and the standard \
-arrangement for new ones. Work out the project and subfolder from their note, the file name \
-and type, and what you have been discussing. If the project or the place is still unclear, \
-ask one short question and wait for the answer; never guess a project. Create a missing \
-project or subfolder yourself. Afterwards say in one line where the file went. If they tell \
-you how they like folders or file names arranged, save it with remember and follow it from \
-then on.
+{filing_section}
 
 {cfg.owner} always uses Google Chrome. Websites you open go to Chrome, and when a task needs a \
 browser, use Chrome, not Edge or another one.
@@ -161,6 +187,18 @@ class Brain:
 
     def reset(self) -> None:
         self.messages.clear()
+
+    async def note(self, happened: str, reply: str) -> None:
+        """Put an event that happened outside the conversation (a file upload) into it, so that the
+        owner's next message ("it's for KSU") is understood. No model call is made."""
+        async with self.lock:
+            if not self.messages:
+                self._system = system_prompt(self.cfg, self.memory.prompt_section())
+            self.memory.log("user", happened)
+            self.memory.log("assistant", reply)
+            self.messages.append({"role": "user", "content": happened})
+            self.messages.append({"role": "assistant", "content": reply})
+            self.last_used = time.time()
 
     async def handle(self, text: str, sink=None) -> None:
         """Process one utterance; all output goes to the hub as events.

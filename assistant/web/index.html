@@ -27,6 +27,11 @@
 
 <aside id="activity" aria-label="Tracking">
   <button id="close-data" class="ghost" hidden>CLOSE</button>
+  <section id="tower-section" hidden>
+    <h2>CONTROL TOWER</h2>
+    <div id="tower"></div>
+    <ul id="tower-waiting"></ul>
+  </section>
   <section>
     <h2>PROJECTS</h2>
     <div id="projects"><p class="empty">No projects yet. Say "start a project called ...".</p></div>
@@ -110,12 +115,24 @@
     <p id="pair-urls" class="mono"></p>
     <p>Pairing PIN <b id="pair-pin" class="mono"></b></p>
   </section>
+  <button id="open-upload" class="ghost wide" hidden>UPLOAD A FILE TO A PROJECT</button>
   <button id="open-voice" class="ghost wide">VOICE LOCK</button>
   <button id="open-holo" class="ghost wide">HOLOGRAM MODE (CAMERA + HANDS)</button>
   <button id="open-data" class="ghost wide">TRACKING DASHBOARD</button>
   <button id="reset" class="ghost wide">START A NEW CONVERSATION</button>
   <button id="mute" class="ghost wide">VOICE REPLIES: ON</button>
   <button id="close-menu" class="wide">CLOSE</button>
+</dialog>
+
+<dialog id="upload">
+  <h2>UPLOAD TO PROJECT CONTROL TOWER</h2>
+  <form id="upload-form">
+    <input id="upload-file" type="file" required>
+    <input id="upload-note" placeholder="Note: project, area, discipline, revision ..." maxlength="500">
+    <button type="submit" class="wide">SEND TO LUMI</button>
+  </form>
+  <p id="upload-result" class="warn"></p>
+  <button id="close-upload" class="ghost wide">CLOSE</button>
 </dialog>
 
 <dialog id="voice">
