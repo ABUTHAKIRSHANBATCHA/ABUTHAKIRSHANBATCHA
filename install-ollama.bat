@@ -15,5 +15,7 @@ if not defined OLLAMA_MODELS (
     pause >nul
   )
 )
-.venv\Scripts\python -m assistant.ollama_setup %*
-pause
+set "MODEL=%~1"
+if "%MODEL%"=="nopause" set "MODEL="
+.venv\Scripts\python -m assistant.ollama_setup %MODEL%
+if not "%~1"=="nopause" pause

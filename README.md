@@ -35,11 +35,18 @@ It is called Lumi; the name is a setting you can change.
 
 ## Set up and start (Windows)
 
-**Quickest way:** unzip the package anywhere and double-click `install.bat`. It copies Lumi to
-`E:\Lumi`, installs it, asks the setup questions, puts "Lumi" and "Lumi check" shortcuts on the
-Desktop, and runs the installation check. To use another place, open a command window in the
-unzipped folder and run `install.bat D:\Lumi`. Running it again later updates the program and
-keeps your settings, keys and memory.
+**Quickest way:** unzip the package anywhere and double-click `install.bat`. It installs what
+is needed and sets Lumi up in `E:\Lumi`:
+
+1. Python 3.12, if it is missing (through Windows' own installer, winget)
+2. Lumi's packages (web server, database, Excel, PDF and Word readers)
+3. the setup questions (brain keys, Telegram, email, folders, voice lock)
+4. Tailscale, if you answer Y (to reach Lumi from your phone anywhere)
+5. Ollama and a local model, if you answer Y
+6. "Lumi" and "Lumi check" shortcuts on the Desktop, then the installation check
+
+To use another place, open a command window in the unzipped folder and run `install.bat D:\Lumi`.
+Running it again later updates the program and keeps your settings, keys and memory.
 
 Or do it by hand in the folder you unzipped:
 
