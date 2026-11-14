@@ -684,3 +684,31 @@ def test_setup_offers_free_brains_first(tmp_path, provider, monkeypatch):
     assert any("flash-free" in line and "pro-paid" in line for line in said)             # listed from the provider
     assert not any("brain offline" in line for line in said)
     assert free_brain.list_models(provider, "k") == ["flash-free", "pro-paid"]
+
+
+def test_installation_check_reports_each_part_without_secrets(tmp_path, provider, monkeypatch):
+    from assistant import check
+    for key in ("ANTHROPIC_API_KEY", "LUMI_TELEGRAM_TOKEN", "LUMI_EMAIL_PASSWORD", "LUMI_FREE_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    said = []
+    rows = {item: (status, detail) for status, item, detail in check.run(tmp_path, say=said.append)}
+    assert rows["Brain"][0] == check.FAIL and "option 1" in rows["Brain"][1]            # nothing set up yet
+    assert rows["Telegram"][0] == check.OFF and rows["Email"][0] == check.OFF
+    assert rows["Projects folder"][0] == check.WARN and rows["Settings file"][0] == check.WARN
+
+    projects = tmp_path / "Projects"
+    (projects / "Marina Tower").mkdir(parents=True)
+    (tmp_path / "config.json").write_text(json.dumps({
+        "provider": "free", "free_base_url": provider, "free_model": "flash-free", "data_dir": str(tmp_path / "data"),
+        "projects_root": str(projects), "watch": [{"name": "Gone", "path": str(tmp_path / "nope"), "kind": "folder"}]}))
+    (tmp_path / "secrets.env").write_text("LUMI_FREE_API_KEY=super-secret-key\n")
+    FakeProvider.replies = [{"role": "assistant", "content": "ready"},
+                            {"role": "assistant", "content": None, "tool_calls": [call("c1", "get_time", {})]}]
+    rows = {item: (status, detail) for status, item, detail in check.run(tmp_path, say=said.append)}
+    monkeypatch.delenv("LUMI_FREE_API_KEY", raising=False)
+    assert rows["Brain"] == (check.OK, "free model flash-free answered: 'ready'")
+    assert rows["Brain can use tools"] == (check.OK, "yes")
+    assert rows["Projects folder"][0] == check.OK and "1 project folders" in rows["Projects folder"][1]
+    assert rows["Watching: Gone"][0] == check.FAIL
+    report = (tmp_path / "lumi-check.txt").read_text()
+    assert "super-secret-key" not in report and "[OK  ] Brain:" in report and "1 problem(s)" in report

@@ -51,6 +51,13 @@ Use Chrome or Edge. Tap the mic (or press Space) and talk. Press `"HEY LUMI"` to
 listening: it then acts only when you start with "Hey Lumi" (or "ஹே லூமி").
 Tap the mic while it is speaking to interrupt.
 
+## Check the installation
+
+Double-click `check.bat`. It tests each part for real (the brain, tool use, Telegram, email,
+voice lock, folders, BIM software, the Revit link) and shows `OK`, `WARN`, `FAIL` or `OFF`
+for each, with what to do. The same report is saved as `lumi-check.txt`; it contains no keys
+or passwords, so it is safe to share.
+
 ## Choosing the brain (free or paid)
 
 `setup.bat` offers four brains. The first three cost nothing.
