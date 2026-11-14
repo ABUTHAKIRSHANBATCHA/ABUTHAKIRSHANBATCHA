@@ -3,7 +3,13 @@ runs as its own Claude conversation and returns a written result; Lumi can
 run several at once."""
 from __future__ import annotations
 
+import asyncio
+
+from .. import subscriptions
 from . import Registry, Tool
+
+READER = (" Your reader is another AI assistant who will relay your findings, so write the full result "
+          "with everything needed to act on it.")
 
 HELPERS = {
     "researcher": {
@@ -39,6 +45,16 @@ HELPERS = {
 def register(reg: Registry, brain) -> None:
     async def ask_helper(helper: str, task: str) -> str:
         spec = HELPERS[helper]
+        # First choice: a subscription the owner already has (the most capable models, no extra
+        # cost). Never for work the owner asked to keep private on this PC.
+        if brain.turn_kind != "private":
+            for name, program in subscriptions.available(brain.cfg):
+                answer = await asyncio.to_thread(
+                    subscriptions.ask, name, program, spec["prompt"] + READER, task,
+                    brain.cfg.data_path / "subscription-work", spec["web"] and name == "claude")
+                if answer:
+                    brain.memory.log_tool(f"helper_via_{name}")
+                    return answer
         if brain.free:
             # The free models have no web search here, so say so rather than invent sources.
             note = (" You cannot search the web in this setup: answer from what you know, and say "
@@ -77,7 +93,9 @@ def register(reg: Registry, brain) -> None:
         "helper knows nothing about this conversation, so put everything it needs in the task. "
         "For a job with several independent parts, call several helpers in the same turn. Use a "
         "helper when the work needs current information from the web or is long enough to be "
-        "worth handing off; answer simple questions yourself.",
+        "worth handing off; answer simple questions yourself. Helpers run on the owner's Claude or "
+        "ChatGPT subscription when one is set up, which is more capable than you, so prefer a helper "
+        "for reviewing documents, drafting, analysis and anything where quality matters.",
         {"helper": {"type": "string", "enum": list(HELPERS)},
          "task": {"type": "string", "description": "Complete, self-contained instructions"}},
         ["helper", "task"], ask_helper))

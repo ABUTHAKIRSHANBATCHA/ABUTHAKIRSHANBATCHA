@@ -12,7 +12,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
-from . import free_brain
+from . import free_brain, subscriptions
 from .config import ROOT, Config
 from .voice_id import MODEL_NAME, MODEL_URL
 
@@ -100,7 +100,17 @@ def run(root: Path = ROOT, ask=input, say=print, install_voice=None, list_models
         config.pop(stale, None)
     secrets.pop("LUMI_FREE_API_KEY", None)
 
-    paid = yes("\nUse paid Claude instead of the free brains", config.get("provider") == "claude" and bool(secrets.get("ANTHROPIC_API_KEY")))
+    say("\n-- Your existing subscriptions --\nIf you have Claude Pro/Max or ChatGPT Plus/Pro, the assistant can use them for thinking and\n"
+        "writing work at no extra cost. Each needs its command-line program installed and signed in.")
+    wanted = []
+    for name, label in (("claude", "Claude"), ("chatgpt", "ChatGPT")):
+        found = subscriptions.find(name)
+        say(f"{label}: " + ("found on this PC." if found else "not found. " + subscriptions.SETUP_HELP[name]))
+        if yes(f"Use your {label} subscription", name in config.get("subscriptions", ["claude", "chatgpt"])):
+            wanted.append(name)
+    config["subscriptions"] = wanted
+
+    paid = yes("\nUse the paid Claude API (charged per use) instead of the free brains", config.get("provider") == "claude" and bool(secrets.get("ANTHROPIC_API_KEY")))
     config["provider"] = "claude" if paid else "free"
     if paid:
         say("Get a key at https://platform.claude.com (API keys). It needs paid credit under Billing.")

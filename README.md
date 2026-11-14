@@ -86,6 +86,29 @@ The top-left of the screen shows which brain is answering.
 | Ollama | Free | Run `install-ollama.bat` | Runs on your PC: private, works offline, no limits; weakest of the three and uses your graphics card |
 | Claude | Paid per use | A key from <https://platform.claude.com> with credit bought under Billing | Best quality; setup asks about it last, answer `n` to stay free |
 
+### Your Claude and ChatGPT subscriptions (no extra cost)
+
+If you already pay for Claude (Pro/Max) or ChatGPT (Plus/Pro), Lumi can use them for thinking
+and writing work: reviewing documents, drafting BEP sections, emails and reports, research and
+business analysis. This uses your subscription's normal usage allowance, not the paid API.
+
+| Subscription | Program to install on the PC | Then sign in once |
+|---|---|---|
+| Claude | Install [Node.js](https://nodejs.org), then `npm install -g @anthropic-ai/claude-code` | Run `claude` and sign in with your subscription account |
+| ChatGPT | Install Node.js, then `npm install -g @openai/codex` | Run `codex login` and sign in with your ChatGPT account |
+
+How Lumi uses them:
+- A free brain (Gemini, Groq or Ollama) runs the conversation and Lumi's tools. When the work
+  needs real thinking, it hands the job to a helper, and the helper runs on your Claude
+  subscription first, then ChatGPT, then the free brains if neither answers.
+- With Claude, the research helpers can search the web.
+- The programs get only web search at most (Claude) or a read-only sandbox (ChatGPT), and run in
+  an empty folder: they cannot read or change your files.
+- Anything you mark "private" or "confidential" is never sent to them.
+- Your subscription's usage limits apply. When a limit is reached that helper falls back to the
+  next option.
+- Switch either off in `setup.bat`. `check.bat` shows whether each one answers.
+
 **Ollama in one step:** double-click `install-ollama.bat`. It installs Ollama, downloads a
 model that fits your graphics card, tests that the model can use tools, and adds it to Lumi's
 brains. Models are stored in the `ollama-models` folder beside Lumi. To choose the model

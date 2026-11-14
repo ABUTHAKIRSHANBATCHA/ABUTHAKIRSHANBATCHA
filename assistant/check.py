@@ -73,6 +73,20 @@ def run(root: Path = ROOT, say=print) -> list[tuple[str, str, str]]:
     else:
         add(FAIL, "Brain", "no brain set up - run setup.bat and choose option 1 (free)")
 
+    from . import subscriptions
+    for name, label in (("claude", "Claude subscription"), ("chatgpt", "ChatGPT subscription")):
+        if name not in cfg.subscriptions:
+            add(OFF, label, "switched off in the settings")
+            continue
+        program = subscriptions.find(name, (cfg.subscription_commands or {}).get(name, ""))
+        if not program:
+            add(OFF, label, "not connected. " + subscriptions.SETUP_HELP[name])
+            continue
+        answer = subscriptions.ask(name, program, "Follow the instruction exactly.", "Reply with the single word: ready",
+                                   cfg.data_path / "subscription-work", timeout=120)
+        add(OK if answer else FAIL, label, f"answered {answer[:30]!r}; used for thinking and writing work" if answer
+            else "installed but did not answer. Open a command window, run the program once and sign in")
+
     # Telegram
     if env("LUMI_TELEGRAM_TOKEN"):
         try:

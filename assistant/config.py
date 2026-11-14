@@ -21,6 +21,10 @@ class Config:
     # [{"name": "gemini", "base_url": "...", "model": "...", "key_env": "LUMI_GEMINI_KEY"}, ...]
     brains: list[dict] = field(default_factory=list)
     auto_select: bool = True         # pick the brain to suit each request; false = always use them in the listed order
+    # Subscriptions you already pay for, used for thinking and writing work at no extra cost.
+    # "claude" = Claude Pro/Max through Claude Code; "chatgpt" = ChatGPT Plus/Pro through Codex.
+    subscriptions: list[str] = field(default_factory=lambda: ["claude", "chatgpt"])
+    subscription_commands: dict = field(default_factory=dict)   # only if the programs are not on PATH
     free_base_url: str = ""          # e.g. https://generativelanguage.googleapis.com/v1beta/openai
     free_model: str = ""             # a model name from that provider that supports tools
     model: str = "claude-opus-5-5"

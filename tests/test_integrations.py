@@ -342,7 +342,7 @@ def test_voice_lock_is_inactive_without_the_model(tmp_path, monkeypatch):
 # --------------------------------------------------------------------- setup
 
 def test_setup_wizard_writes_config_and_secrets(tmp_path, monkeypatch):
-    answers = iter(["Lumi", "Abu", "AED", "", "", "y", "sk-test-key", "", "y", "abu@gmail.com", "", "", "mail-pass",
+    answers = iter(["Lumi", "Abu", "AED", "", "", "", "n", "y", "sk-test-key", "", "y", "abu@gmail.com", "", "", "mail-pass",
                     "D:/Projects", "D:/Projects/Marina", "", "D:/PROJECT_CONTROL_TOWER", "y"])
     said, installed = [], []
     setup_wizard.run(tmp_path, ask=lambda _: next(answers), say=said.append,
@@ -684,7 +684,7 @@ def test_setup_configures_several_free_brains(tmp_path, provider, monkeypatch):
     listed = {"gemini": ["flash-free", "pro-paid"], "groq": ["fast-70b"], "ollama": ["qwen3:8b"]}
     lister = lambda url, key: listed[url.rsplit("/", 1)[1]]
     #          name owner curr  gemini key+model      groq key+model       ollama model  first    claude  tg  email  proj watch log voice
-    answers = iter(["", "Abu", "", "g-key", "flash-free", "q-key", "fast-70b", "qwen3:8b", "groq", "",    "", "n",   "",  "",   "", "", "n"])
+    answers = iter(["", "Abu", "", "g-key", "flash-free", "q-key", "fast-70b", "qwen3:8b", "groq", "y", "n", "",    "", "n",   "",  "",   "", "", "n"])
     said = []
     setup_wizard.run(tmp_path, ask=lambda _: next(answers), say=said.append, list_models=lister)
     config = json.loads((tmp_path / "config.json").read_text())
@@ -694,6 +694,7 @@ def test_setup_configures_several_free_brains(tmp_path, provider, monkeypatch):
     secrets = (tmp_path / "secrets.env").read_text()
     assert "LUMI_GEMINI_KEY=g-key" in secrets and "LUMI_GROQ_KEY=q-key" in secrets
     assert not any("brain offline" in line for line in said)
+    assert config["subscriptions"] == ["claude"]             # ChatGPT was declined
 
     keep = iter([""] * 30)                                   # run again, Enter everywhere: nothing changes
     setup_wizard.run(tmp_path, ask=lambda _: next(keep), say=said.append, list_models=lister)
@@ -900,3 +901,61 @@ def test_brain_is_chosen_to_suit_the_work(tmp_path, monkeypatch, provider):
     asyncio.run(brain.handle("privately: summarise the contract", sink=sink))
     assert "did not send it anywhere" in next(e["text"] for e in seen if e["type"] == "error")
     monkeypatch.setattr(free_brain, "chat", real_chat)
+
+
+# ------------------------------------------------------------ subscriptions
+
+def test_helpers_use_existing_subscriptions_first(tmp_path, monkeypatch, provider):
+    import stat
+    from assistant import subscriptions
+
+    def fake_program(name, body):
+        path = tmp_path / name
+        path.write_text("#!/usr/bin/env python3\nimport sys, json, os\nprompt = sys.stdin.read()\n" + body)
+        path.chmod(path.stat().st_mode | stat.S_IEXEC)
+        return str(path)
+
+    log = tmp_path / "calls.jsonl"
+    record = f"open({str(log)!r}, 'a').write(json.dumps({{'argv': sys.argv[1:], 'prompt': prompt, 'cwd': os.getcwd()}}) + '\\n')\n"
+    claude = fake_program("claude", record + "print('Claude says: three competitors.')\n")
+    codex = fake_program("codex", record + "print('ChatGPT says: draft ready.')\n")
+    broken = fake_program("broken", "sys.exit(3)\n")
+
+    assert subscriptions.command("claude", "claude", web=True) == [
+        "claude", "-p", "--output-format", "text", "--tools", "WebSearch,WebFetch", "--allowedTools", "WebSearch,WebFetch"]
+    assert subscriptions.command("claude", "claude", web=False)[-2:] == ["--tools", ""]         # no tools at all
+    assert subscriptions.command("chatgpt", "codex", web=True) == [
+        "codex", "exec", "--sandbox", "read-only", "--skip-git-repo-check", "-"]
+
+    brains = [{"name": "ollama", "base_url": provider + "/ollama", "model": "local", "key_env": ""}]
+    app = make_app(tmp_path, monkeypatch, provider="free", brains=brains,
+                   subscription_commands={"claude": claude, "chatgpt": codex})
+    brain = app.state.brain
+    helper = brain.registry.tools["ask_helper"].handler
+    before = len(FakeProvider.requests)
+    assert asyncio.run(helper(helper="researcher", task="BIM audit competitors in Riyadh")) == "Claude says: three competitors."
+    call_1 = json.loads(log.read_text().splitlines()[-1])
+    assert "WebSearch,WebFetch" in call_1["argv"] and "BIM audit competitors in Riyadh" in call_1["prompt"]
+    assert "research specialist" in call_1["prompt"] and call_1["cwd"].endswith("subscription-work")   # an empty folder
+    assert len(FakeProvider.requests) == before                                      # the free brain was not used
+
+    # Claude's program fails -> ChatGPT answers; both fail -> the free brain answers.
+    brain.cfg.subscription_commands = {"claude": broken, "chatgpt": codex}
+    assert asyncio.run(helper(helper="writer", task="Draft a reply")) == "ChatGPT says: draft ready."
+    brain.cfg.subscription_commands = {"claude": broken, "chatgpt": broken}
+    FakeProvider.replies = [{"role": "assistant", "content": "From the free brain."}]
+    assert asyncio.run(helper(helper="writer", task="Draft a reply")) == "From the free brain."
+
+    # Private work never goes to a subscription.
+    brain.cfg.subscription_commands = {"claude": claude, "chatgpt": codex}
+    calls = len(log.read_text().splitlines())
+    brain.turn_kind, brain.turn_brains = "private", brains
+    FakeProvider.replies = [{"role": "assistant", "content": "Kept on this PC."}]
+    assert asyncio.run(helper(helper="bim_specialist", task="Review this confidential contract")) == "Kept on this PC."
+    assert len(log.read_text().splitlines()) == calls
+    brain.turn_kind, brain.turn_brains = "", None
+
+    brain.cfg.subscriptions = []                                                     # switched off in settings
+    FakeProvider.replies = [{"role": "assistant", "content": "Free again."}]
+    assert asyncio.run(helper(helper="writer", task="x")) == "Free again."
+    assert subscriptions.find("claude", str(tmp_path / "missing")) == ""
