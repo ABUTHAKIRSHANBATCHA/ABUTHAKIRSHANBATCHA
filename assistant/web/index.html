@@ -77,6 +77,21 @@
   </div>
 </footer>
 
+<section id="holo" hidden aria-label="Hologram mode">
+  <video id="holo-video" playsinline muted></video>
+  <canvas id="holo-canvas"></canvas>
+  <div class="holo-controls">
+    <button id="holo-close">CLOSE</button>
+    <button id="holo-mirror" class="ghost">MIRROR ON</button>
+    <button id="holo-bw" class="ghost">B&amp;W OFF</button>
+    <button id="holo-reset" class="ghost">RESET VIEW</button>
+    <select id="holo-camera" aria-label="Camera"></select>
+    <label>DIM <input id="holo-dim" type="range" min="0" max="90" value="40"> <span id="holo-dim-value">40%</span></label>
+  </div>
+  <p id="holo-status"></p>
+  <p id="holo-hint"></p>
+</section>
+
 <div id="cards"></div>
 
 <dialog id="menu">
@@ -87,6 +102,7 @@
     <p id="pair-urls" class="mono"></p>
     <p>Pairing PIN <b id="pair-pin" class="mono"></b></p>
   </section>
+  <button id="open-holo" class="ghost wide">HOLOGRAM MODE (CAMERA + HANDS)</button>
   <button id="open-data" class="ghost wide">TRACKING DASHBOARD</button>
   <button id="reset" class="ghost wide">START A NEW CONVERSATION</button>
   <button id="mute" class="ghost wide">VOICE REPLIES: ON</button>
@@ -115,6 +131,8 @@
 
 <script src="wake.js"></script>
 <script src="hologram.js"></script>
+<script src="gestures.js"></script>
+<script src="holo.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

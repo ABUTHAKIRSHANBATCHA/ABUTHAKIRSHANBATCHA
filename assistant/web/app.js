@@ -275,6 +275,7 @@
     reply_done() { busy = false; followUntil = Date.now() + FOLLOW_UP_MS; speak(speakBuffer); speakBuffer = ""; settle(); },
     tool: logTool,
     dashboard: drawDashboard,
+    holo(e) { Holo.act(e.action); },
     card,
     stats(e) {
       gauge("cpu", e.cpu, e.cpu > 85); gauge("memory", e.memory, e.memory > 88);
@@ -335,6 +336,7 @@
     $("menu").showModal();
   };
   $("close-menu").onclick = () => $("menu").close();
+  $("open-holo").onclick = () => { $("menu").close(); Holo.open(); };
   $("open-data").onclick = () => { $("menu").close(); document.body.classList.add("show-data"); $("close-data").hidden = false; };
   $("close-data").onclick = () => { document.body.classList.remove("show-data"); $("close-data").hidden = true; };
   $("activity").addEventListener("pointerover", showTip);

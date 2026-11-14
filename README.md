@@ -19,6 +19,7 @@ It is called Lumi; the name is a setting you can change.
 | Tracking dashboard: project progress by stage, requests per day, most used actions, saved ideas (right side on PC; MENU > TRACKING DASHBOARD on phone) | Working |
 | Wake phrase: press `"HEY LUMI"`, then say "Hey Lumi, ..." to give a command; follow-ups within 20 seconds need no wake phrase | Logic tested with a simulated microphone; not yet tried with a real one |
 | Money tracking: record income and expenses per business by voice; income chart on the dashboard | Working (recording by voice needs the Claude brain) |
+| Hologram mode: camera view with a 3D building model you move with your hands (pinch to rotate, fist to move, two pinches to scale, spread two open palms to explode the levels); also by voice ("Hey Lumi, explode the model") | Gesture logic and hand-tracking library tested; not yet tried with real hands on a real camera |
 | Find installed BIM software, launch it, find model files (.rvt .nwd .ifc .dwg ...) | Written for Windows; not yet run on a Windows PC |
 | Live Revit model queries (model info, element counts, warnings, levels, sheets, links) | Written; not yet run inside Revit |
 | Brain (Claude) | Needs your API key; without one it only opens things and reports status |
@@ -54,6 +55,23 @@ Copy `config.example.json` to `config.json` and edit:
 
 Other settings: `model`, `effort` (`low` is faster, `high` is smarter),
 `default_language` (`en-IN` or `ta-IN`), `bim_search_roots` (folders to search for models).
+
+## Hologram mode
+
+MENU > HOLOGRAM MODE, or say "Hey Lumi, open the hologram". Allow the camera when asked.
+
+| Gesture | Effect |
+|---|---|
+| Pinch thumb and index finger, move the hand | Rotate the model |
+| Make a fist, move it | Move the model |
+| Pinch with both hands, pull apart or push together | Make it bigger or smaller |
+| Two open palms, spread apart / bring together | Explode the levels / assemble |
+
+Controls on screen: mirror, black and white, camera choice, background dim, reset view.
+Without a camera: drag to rotate, scroll to scale, `E` to explode, `R` to reset, `Esc` to close.
+Hand tracking is downloaded from the internet the first time it is used. The camera picture
+stays in your browser; it is not sent to Lumi's brain or stored. The model shown is a built-in
+sample building.
 
 ## Memory
 
@@ -124,7 +142,10 @@ Then ask "how many warnings are in my model?" The bridge is read-only.
 - The wake phrase works only while the page is open with `"HEY LUMI"` switched on, and the
   browser sends the audio to its speech service while listening. A fully offline wake word that
   runs in the background is not built.
-- Inbox handling, calendar and other app connections, and separate helper agents.
+- Loading your own Revit, Civil 3D or Navisworks model into hologram mode (it shows a sample
+  building today).
+- Inbox handling, calendar and other app connections, and separate helper agents. Email will
+  be added only when you ask, and will act only with your approval.
 - Using the phone away from home Wi-Fi.
 - Operating the BIM software itself: changing the Revit model (the bridge only reads),
   running Navisworks clash tests, ACC uploads and transmittals. Today it manages the process
@@ -139,5 +160,6 @@ Then ask "how many warnings are in my model?" The bridge is read-only.
 ```
 pip install -r requirements.txt pytest httpx
 python -m pytest tests
+node tests/web.test.js
 python -m assistant
 ```

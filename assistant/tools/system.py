@@ -183,6 +183,17 @@ def register(reg: Registry, cfg, hub) -> None:
         await hub.broadcast({"type": "language", "language": language})
         return f"Voice language switched to {language}."
 
+    async def hologram(action: str) -> str:
+        await hub.broadcast({"type": "holo", "action": action})
+        return f"Hologram: {action}."
+
+    reg.add(Tool(
+        "hologram",
+        "Control hologram mode on the owner's screens: the camera view with a 3D building model "
+        "that the owner moves with hand gestures. 'open' and 'close' switch the mode; 'explode' "
+        "lifts the model's levels apart, 'assemble' closes it again, 'reset' restores the view.",
+        {"action": {"type": "string", "enum": ["open", "close", "explode", "assemble", "reset"]}},
+        ["action"], hologram))
     reg.add(Tool(
         "get_system_status",
         "Current date and time, plus this computer's CPU, memory, disk, battery and the "
