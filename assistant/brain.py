@@ -162,7 +162,12 @@ class Brain:
             except anthropic.APIConnectionError:
                 await self._say_error("I cannot reach the Claude API. Check the internet connection.")
             except anthropic.APIStatusError as e:
-                await self._say_error(f"The Claude API returned an error: {e.message}")
+                if "credit balance" in str(e.message).lower():
+                    await self._say_error(
+                        "My Claude API account has no credit left. Add credit at "
+                        "platform.claude.com under Billing, then talk to me again.")
+                else:
+                    await self._say_error(f"The Claude API returned an error: {e.message}")
             finally:
                 await self.hub.broadcast({"type": "reply_done"})
                 self.hub.sink = None

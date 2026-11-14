@@ -44,6 +44,9 @@ It is called Lumi; the name is a setting you can change.
    - whether to install voice lock (downloads about 60 MB)
 3. Double-click `start.bat`. The screen opens at <http://127.0.0.1:8765>.
 
+The API key needs paid credit on the same account: at <https://platform.claude.com> open
+Billing and buy credits. A Claude.ai chat subscription (Pro or Max) does not include API credit.
+
 Run `setup.bat` again whenever you want to change an answer. Settings are saved in
 `config.json`; keys and passwords are saved in `secrets.env`, which stays on your PC.
 

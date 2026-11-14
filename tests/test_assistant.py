@@ -367,3 +367,25 @@ def test_money_ledger(tmp_path):
     assert months[-2]["income"] == 8000.0 and months[0]["income"] == 0.0
     assert ledger.months(2, "training", today=dt.date(2026, 11, 14))[0]["income"] == 8000.0
     assert ledger.months(2, today=dt.date(2026, 1, 10))[0]["month"] == "2025-12"   # year rollover
+
+
+def test_no_credit_error_is_explained_plainly(app):
+    import anthropic, httpx
+    brain = app.state.brain
+
+    async def no_credit():
+        response = httpx.Response(400, request=httpx.Request("POST", "https://api.anthropic.com/v1/messages"))
+        raise anthropic.BadRequestError(
+            "Your credit balance is too low to access the Anthropic API.", response=response, body=None)
+
+    brain.client, brain._stream_turn = object(), no_credit
+    seen = []
+
+    async def sink(event):
+        seen.append(event)
+
+    asyncio.run(brain.handle("hey Lumi", sink=sink))
+    errors = [e["text"] for e in seen if e["type"] == "error"]
+    assert errors == ["My Claude API account has no credit left. Add credit at platform.claude.com "
+                      "under Billing, then talk to me again."]
+    assert brain.messages == []
