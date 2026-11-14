@@ -35,6 +35,14 @@ It is called Lumi; the name is a setting you can change.
 
 ## Set up and start (Windows)
 
+**Quickest way:** unzip the package anywhere and double-click `install.bat`. It copies Lumi to
+`E:\Lumi`, installs it, asks the setup questions, puts "Lumi" and "Lumi check" shortcuts on the
+Desktop, and runs the installation check. To use another place, open a command window in the
+unzipped folder and run `install.bat D:\Lumi`. Running it again later updates the program and
+keeps your settings, keys and memory.
+
+Or do it by hand in the folder you unzipped:
+
 1. Install [Python 3.10+](https://www.python.org/downloads/) and tick "Add to PATH".
 2. Double-click `setup.bat`. It installs everything and asks for:
    - the assistant's name and what it should call you
