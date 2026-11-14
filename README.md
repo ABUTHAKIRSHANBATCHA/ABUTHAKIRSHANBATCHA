@@ -224,6 +224,30 @@ to match your dashboard.
 
 Any program on the PC can already be opened or driven through commands, with your approval.
 
+## Use the PC as Lumi's server, reach it from other devices
+
+Lumi runs on the PC; your phone, tablet or another computer are just screens for it.
+
+**Keep the server running**
+- `server.bat` runs Lumi without opening the browser. `autostart-on.bat` makes it start each
+  time you sign in to Windows (`autostart-off.bat` undoes that).
+- Stop the PC from sleeping: Windows Settings > System > Power > Screen and sleep > set
+  "When plugged in, put my device to sleep after" to Never. A sleeping PC cannot answer.
+
+**Three ways to reach it**
+
+| Where you are | How | Gives you |
+|---|---|---|
+| Same Wi-Fi as the PC | Open `https://<PC address>:8443` (shown in MENU on the PC), pair with the PIN | The full screen: voice, hologram, dashboard |
+| Anywhere, simple | Telegram | Chat, approvals, sending and receiving files |
+| Anywhere, full screen | Install [Tailscale](https://tailscale.com) (free for personal use) on the PC and the phone, sign in to both with the same account, then open `https://<PC's Tailscale address>:8443` | The full screen from anywhere, over a private link only your devices can use |
+
+With Tailscale, restart Lumi once after installing it so the PC's Tailscale address (it starts
+with `100.`) is listed in MENU and accepted by the security certificate.
+
+Do not open port 8443 on your router to the internet. That would let anyone on the internet
+reach the pairing screen of a program that can control your PC.
+
 ## Give it a name
 
 Copy `config.example.json` to `config.json` and edit:
