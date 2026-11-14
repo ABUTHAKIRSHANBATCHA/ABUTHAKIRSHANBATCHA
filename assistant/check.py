@@ -41,24 +41,25 @@ def run(root: Path = ROOT, say=print) -> list[tuple[str, str, str]]:
 
     # Brain
     if cfg.provider == "free":
-        if not (cfg.free_base_url and cfg.free_model):
-            add(FAIL, "Brain", "free brain chosen but no model set - run setup.bat")
-        else:
+        chain = free_brain.chain(cfg)
+        if not chain:
+            add(FAIL, "Brain", "no free brain is set up - run setup.bat")
+        tool = [{"type": "function", "function": {"name": "get_time", "description": "Current time"}}]
+        for n, b in enumerate(chain, 1):
+            label = f"Brain {n}: {b['name']}"
+            key = env(b.get("key_env") or "", "")
             try:
-                reply = free_brain.chat(cfg.free_base_url, env("LUMI_FREE_API_KEY", ""), cfg.free_model,
+                reply = free_brain.chat(b["base_url"], key, b["model"],
                                         [{"role": "user", "content": "Reply with the single word: ready"}])
-                add(OK, "Brain", f"free model {cfg.free_model} answered: {(reply.get('content') or '').strip()[:40]!r}")
-                try:
-                    tool = [{"type": "function", "function": {"name": "get_time", "description": "Current time"}}]
-                    r = free_brain.chat(cfg.free_base_url, env("LUMI_FREE_API_KEY", ""), cfg.free_model,
-                                        [{"role": "user", "content": "What time is it? Use the get_time tool."}], tool)
-                    add(OK if r.get("tool_calls") else WARN, "Brain can use tools",
-                        "yes" if r.get("tool_calls") else "the model answered without using the tool; "
-                        "Lumi may talk but not act. Pick another model in setup.bat")
-                except free_brain.FreeAPIError as e:
-                    add(FAIL, "Brain can use tools", f"this model rejected tools ({e.status}): {e.message[:120]}. Pick another model")
+                r = free_brain.chat(b["base_url"], key, b["model"],
+                                    [{"role": "user", "content": "What time is it? Use the get_time tool."}], tool)
+                if r.get("tool_calls"):
+                    add(OK, label, f"{b['model']} answered {(reply.get('content') or '').strip()[:30]!r} and can use tools")
+                else:
+                    add(WARN, label, f"{b['model']} answers but did not use the tool; it may talk but not act. "
+                                     "Pick another model in setup.bat")
             except free_brain.FreeAPIError as e:
-                add(FAIL, "Brain", f"free model {cfg.free_model} failed ({e.status}): {e.message[:160]}")
+                add(FAIL, label, f"{b['model']} failed ({e.status}): {e.message[:150]}")
     elif env("ANTHROPIC_API_KEY"):
         try:
             import anthropic

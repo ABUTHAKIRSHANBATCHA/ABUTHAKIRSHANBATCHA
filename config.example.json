@@ -2,8 +2,26 @@
   "name": "Lumi",
   "owner": "Boss",
   "provider": "free",
-  "free_base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-  "free_model": "",
+  "brains": [
+    {
+      "name": "gemini",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "model": "",
+      "key_env": "LUMI_GEMINI_KEY"
+    },
+    {
+      "name": "groq",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "",
+      "key_env": "LUMI_GROQ_KEY"
+    },
+    {
+      "name": "ollama",
+      "base_url": "http://localhost:11434/v1",
+      "model": "",
+      "key_env": ""
+    }
+  ],
   "model": "claude-opus-5-5",
   "effort": "medium",
   "http_port": 8765,

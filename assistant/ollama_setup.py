@@ -76,9 +76,16 @@ def model_works(model: str) -> tuple[bool, str]:
 
 
 def save_choice(root: Path, model: str) -> None:
+    """Add Ollama to Lumi's free brains (or update its model), keeping the others and their order."""
     file = root / "config.json"
     config = json.loads(file.read_text(encoding="utf-8-sig")) if file.exists() else {}
-    config.update(provider="free", brain_choice="ollama", free_base_url=BASE_URL, free_model=model)
+    entry = {"name": "ollama", "base_url": BASE_URL, "model": model, "key_env": ""}
+    brains = config.get("brains", [])
+    if any(b.get("name") == "ollama" for b in brains):
+        brains = [entry if b.get("name") == "ollama" else b for b in brains]
+    else:
+        brains.append(entry)
+    config.update(provider="free", brains=brains)
     file.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
@@ -126,7 +133,7 @@ def run(root: Path = ROOT, wanted: str = "", say=print, sh=subprocess.run, ram_g
         ok, why = works(model)
         if ok:
             save_choice(root, model)
-            say(f"\n{model} works and is now Lumi's brain. Start Lumi with start.bat.\n"
+            say(f"\n{model} works and has been added to Lumi's free brains. Start Lumi with start.bat.\n"
                 "The first answer after starting is slow while the model loads.")
             return True
         say(f"{model} is not suitable: {why}.")

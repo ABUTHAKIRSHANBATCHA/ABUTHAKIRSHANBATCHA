@@ -17,6 +17,9 @@ class Config:
     owner: str = "Boss"              # how the assistant addresses you
     # Which brain to use: "free" (no cost; see free_base_url / free_model) or "claude" (paid API).
     provider: str = "claude"
+    # Free brains in the order to try them; the next one takes over when one reaches its limit.
+    # [{"name": "gemini", "base_url": "...", "model": "...", "key_env": "LUMI_GEMINI_KEY"}, ...]
+    brains: list[dict] = field(default_factory=list)
     free_base_url: str = ""          # e.g. https://generativelanguage.googleapis.com/v1beta/openai
     free_model: str = ""             # a model name from that provider that supports tools
     model: str = "claude-opus-5-5"

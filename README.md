@@ -46,7 +46,7 @@ Or do it by hand in the folder you unzipped:
 1. Install [Python 3.10+](https://www.python.org/downloads/) and tick "Add to PATH".
 2. Double-click `setup.bat`. It installs everything and asks for:
    - the assistant's name and what it should call you
-   - which brain to use and its key (see "Choosing the brain" below; option 1 is free)
+   - keys for the free brains you want (see "The brain" below)
    - a Telegram bot token (optional)
    - your email address and app password (optional)
    - whether to install voice lock (downloads about 60 MB)
@@ -66,30 +66,35 @@ voice lock, folders, BIM software, the Revit link) and shows `OK`, `WARN`, `FAIL
 for each, with what to do. The same report is saved as `lumi-check.txt`; it contains no keys
 or passwords, so it is safe to share.
 
-## Choosing the brain (free or paid)
+## The brain: three free ones working together
 
-`setup.bat` offers four brains. The first three cost nothing.
+`setup.bat` lets you set up all of these. Lumi uses the first one and switches to the next by
+itself when one reaches its free limit or cannot be reached, then goes back when it recovers.
+The top-left of the screen shows which brain is answering.
 
-| Option | Cost | What you need | Good to know |
+| Brain | Cost | What you need | Good to know |
 |---|---|---|---|
-| 1. Google Gemini free tier | Free | A key from <https://aistudio.google.com/apikey> (Google account, no card) | Daily request limit. Google may use free-tier conversations to improve its models, so think before sending confidential client documents |
-| 2. Groq free tier | Free | A key from <https://console.groq.com/keys> (no card) | Fast; lower daily limits |
-| 3. Ollama on this PC | Free | Install <https://ollama.com> and download a model that supports tools | Fully private and offline, but needs a strong PC (16 GB RAM or a good graphics card) and is the weakest of the four |
-| 4. Claude | Paid per use | A key from <https://platform.claude.com> with credit bought under Billing | Best quality; a Claude.ai chat subscription does not include this credit |
+| Google Gemini | Free | A key from Google AI Studio: <https://aistudio.google.com/apikey> (Google account, no card) | "Google AI Studio" and "Gemini API" are the same thing: AI Studio is the website where you create the Gemini API key. Daily request limit. Google may use free-tier conversations to improve its models, so think before sending confidential client documents |
+| Groq | Free | A key from <https://console.groq.com/keys> (no card) | Fast; lower daily limits |
+| Ollama | Free | Run `install-ollama.bat` | Runs on your PC: private, works offline, no limits; weakest of the three and uses your graphics card |
+| Claude | Paid per use | A key from <https://platform.claude.com> with credit bought under Billing | Best quality; setup asks about it last, answer `n` to stay free |
 
 **Ollama in one step:** double-click `install-ollama.bat`. It installs Ollama, downloads a
-model that fits your PC's memory, tests that the model can use tools, and makes it Lumi's
-brain. Models are stored in the `ollama-models` folder beside Lumi. To choose the model
+model that fits your graphics card, tests that the model can use tools, and adds it to Lumi's
+brains. Models are stored in the `ollama-models` folder beside Lumi. To choose the model
 yourself: `install-ollama.bat llama3.1:8b`.
 
-Setup lists the models your key can use; pick one that supports tools (function calling).
-Free providers change their model names and limits often, so if a model stops working, run
-`setup.bat` again and pick another from the list.
+A good order is Gemini first, Groq second, Ollama last: the online ones are more capable, and
+Ollama is the one that never runs out.
 
-What changes with a free brain:
+For Gemini and Groq, setup lists the models your key can use; pick one that supports tools
+(function calling). Free providers change their model names and limits often, so if a model
+stops working, run `setup.bat` again and pick another. `check.bat` tests every brain.
+
+What to expect from free brains:
 - Answers are less capable than Claude's, most noticeably on long jobs with many steps such as
   breaking an EIR into checklist items.
-- When the free limit is reached Lumi says so; it works again after the limit resets.
+- If every brain is at its limit or unreachable, Lumi says so.
 - Helper agents cannot search the web. They answer from what the model knows and say what may
   be out of date.
 - Everything else works the same: approvals, memory, filing, dashboard, voice lock, Telegram.

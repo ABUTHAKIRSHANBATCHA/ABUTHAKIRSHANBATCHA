@@ -60,33 +60,51 @@ def run(root: Path = ROOT, ask=input, say=print, install_voice=None, list_models
     config["currency"] = question("Currency for money tracking", config.get("currency", defaults.currency))
 
     say("\n-- Brain (the AI model that thinks for the assistant) --")
-    options = list(free_brain.PROVIDERS) + ["claude"]
-    for n, key in enumerate(options, 1):
-        label = free_brain.PROVIDERS[key]["label"] if key != "claude" else "Claude (paid: you buy API credit)"
-        say(f"  {n}. {label}")
-    current = config.get("brain_choice", "gemini")
-    picked = question("Choose a number", str(options.index(current) + 1 if current in options else 1))
-    choice = options[int(picked) - 1] if picked.isdigit() and 1 <= int(picked) <= len(options) else current
-    config["brain_choice"] = choice
-    if choice == "claude":
-        config["provider"] = "claude"
-        say("Get a key at https://platform.claude.com (API keys). It needs paid credit under Billing.")
-        secret("Claude API key", "ANTHROPIC_API_KEY")
-    else:
-        spec = free_brain.PROVIDERS[choice]
-        config["provider"], config["free_base_url"] = "free", spec["base_url"]
-        say(spec["key_help"])
+    say("Set up as many free brains as you like. The assistant uses the first one and switches to the\n"
+        "next automatically when one reaches its free limit or cannot be reached.")
+    lister = list_models or _models
+    old = {b["name"]: b for b in config.get("brains", [])}
+    if secrets.get("LUMI_FREE_API_KEY") and config.get("brain_choice") in ("gemini", "groq"):   # earlier setup
+        key_env = free_brain.PROVIDERS[config["brain_choice"]]["key_env"]
+        secrets.setdefault(key_env, secrets.pop("LUMI_FREE_API_KEY"))
+        old.setdefault(config["brain_choice"], {"model": config.get("free_model", "")})
+    brains = []
+    for name, spec in free_brain.PROVIDERS.items():
+        say(f"\n{spec['label']}\n{spec['key_help']}")
         if spec["needs_key"]:
-            secret("Free API key", "LUMI_FREE_API_KEY")
-        else:
-            secrets.pop("LUMI_FREE_API_KEY", None)
-        models = (list_models or _models)(spec["base_url"], secrets.get("LUMI_FREE_API_KEY", "") if spec["needs_key"] else "")
+            secret(f"{name.capitalize()} API key", spec["key_env"])
+            if not secrets.get(spec["key_env"]):
+                continue
+        models = lister(spec["base_url"], secrets.get(spec["key_env"], ""))
+        current = old.get(name, {}).get("model", "")
+        if not spec["needs_key"] and not models:
+            say("Ollama is not running or has no models yet. To add it later, run install-ollama.bat.")
+            if current:
+                brains.append(old[name])               # keep what was set up before
+            continue
         if models:
             say("Models available to you:\n  " + "\n  ".join(models[:40]))
-            say("Pick one that supports tools (function calling). 'flash' models are a good start on Gemini.")
+            say("Pick one that supports tools (function calling)."
+                + (" A 'flash' model is a good start." if name == "gemini" else ""))
         else:
-            say("I could not list the models (check the key, or that Ollama is running). Type the model name.")
-        config["free_model"] = question("Model name", config.get("free_model", "") if config.get("free_model", "") in models or not models else "")
+            say("I could not list the models (check the key). You can still type a model name.")
+        model = question(f"{name.capitalize()} model (Enter to skip)" if not current else f"{name.capitalize()} model", current)
+        if model:
+            brains.append({"name": name, "base_url": spec["base_url"], "model": model, "key_env": spec["key_env"]})
+    if len(brains) > 1:
+        names = [b["name"] for b in brains]
+        first = question(f"Which one first ({', '.join(names)})", old and next((n for n in old if n in names), names[0]) or names[0])
+        brains.sort(key=lambda b: b["name"] != first)
+    config["brains"] = brains
+    for stale in ("free_base_url", "free_model", "brain_choice"):
+        config.pop(stale, None)
+    secrets.pop("LUMI_FREE_API_KEY", None)
+
+    paid = yes("\nUse paid Claude instead of the free brains", config.get("provider") == "claude" and bool(secrets.get("ANTHROPIC_API_KEY")))
+    config["provider"] = "claude" if paid else "free"
+    if paid:
+        say("Get a key at https://platform.claude.com (API keys). It needs paid credit under Billing.")
+        secret("Claude API key", "ANTHROPIC_API_KEY")
 
     say("\n-- Phone messaging (Telegram) --\nIn Telegram, message @BotFather, send /newbot, and copy the token it gives you.")
     secret("Telegram bot token", "LUMI_TELEGRAM_TOKEN")
@@ -124,7 +142,7 @@ def run(root: Path = ROOT, ask=input, say=print, install_voice=None, list_models
     secrets_file.write_text("# Keys and passwords. Keep this file private.\n"
                             + "".join(f"{k}={v}\n" for k, v in secrets.items()), encoding="utf-8")
     say(f"\nSaved {config_file.name} and {secrets_file.name}.")
-    ready = bool(config.get("free_model")) if config["provider"] == "free" else bool(secrets.get("ANTHROPIC_API_KEY"))
+    ready = bool(config["brains"]) if config["provider"] == "free" else bool(secrets.get("ANTHROPIC_API_KEY"))
     if not ready:
         say("No model or key was entered, so the assistant will start with its brain offline.")
     say("Start the assistant with start.bat (or: python -m assistant).\n")

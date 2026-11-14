@@ -122,6 +122,8 @@ class Brain:
         self.cfg = cfg
         self.memory = memory
         self._system = ""    # built when a conversation starts, then kept stable for caching
+        self.active_free = ""                     # which free brain answered last
+        self.resting: dict[str, float] = {}       # free brains to skip for a while, by name -> until
         self.registry = registry
         self.hub = hub
         self.messages: list[dict] = []
@@ -141,7 +143,7 @@ class Brain:
 
     @property
     def free(self) -> bool:
-        return self.cfg.provider == "free" and bool(self.cfg.free_base_url and self.cfg.free_model)
+        return self.cfg.provider == "free" and bool(free_brain.chain(self.cfg))
 
     @property
     def online(self) -> bool:
@@ -150,7 +152,9 @@ class Brain:
     @property
     def brain_name(self) -> str:
         if self.free:
-            return f"free: {self.cfg.free_model}"
+            chain = free_brain.chain(self.cfg)
+            current = next((b for b in chain if b["name"] == self.active_free), chain[0])
+            return f"free: {current['model']}" + (f" (+{len(chain) - 1} backup)" if len(chain) > 1 else "")
         return self.cfg.model if self.client is not None else "offline"
 
     def reset(self) -> None:
@@ -176,13 +180,13 @@ class Brain:
                     await self._offline(text)
             except free_brain.FreeAPIError as e:
                 if e.status == 429:
-                    await self._say_error("The free model's limit is used up for now. Try again in a minute; "
-                                          "the daily limit resets tomorrow.")
+                    await self._say_error("Every free brain has reached its limit for now. Try again in a few "
+                                          "minutes; daily limits reset tomorrow.")
                 elif e.status in (401, 403) or "api key" in e.message.lower():
                     await self._say_error("The free model's key was rejected. Run setup again and check the key.")
                 elif e.status == 0:
-                    await self._say_error(f"I cannot reach the free model at {self.cfg.free_base_url}. "
-                                          "Check the internet, or that Ollama is running.")
+                    await self._say_error("I cannot reach any free brain. Check the internet, or that Ollama "
+                                          "is running.")
                 else:
                     await self._say_error(f"The free model returned an error: {e.message}")
             except anthropic.AuthenticationError:
@@ -276,11 +280,33 @@ class Brain:
 
     # -------------------------------------------------------------- free model
 
+    async def _free_chat(self, messages: list[dict], tools: list[dict] | None = None) -> dict:
+        """Ask the free brains in order. One that is out of quota, unreachable or misconfigured
+        is rested for a while and the next one takes over."""
+        chain = free_brain.chain(self.cfg)
+        now = time.time()
+        ready = [b for b in chain if self.resting.get(b["name"], 0) <= now] or chain   # all resting: try anyway
+        last: free_brain.FreeAPIError | None = None
+        for brain in ready:
+            try:
+                reply = await asyncio.to_thread(
+                    free_brain.chat, brain["base_url"], os.environ.get(brain.get("key_env") or "", ""),
+                    brain["model"], free_brain.for_provider(messages, brain["name"]), tools)
+            except free_brain.FreeAPIError as e:
+                last = e
+                rejected_key = e.status in (401, 403) or "api key" in e.message.lower()
+                self.resting[brain["name"]] = time.time() + (3600 if rejected_key else 300 if e.status == 429 else 120)
+                continue
+            if brain["name"] != self.active_free:
+                self.active_free = brain["name"]
+                await self.hub.broadcast({"type": "brain", "name": self.brain_name})
+            reply["_by"] = brain["name"]
+            return reply
+        raise last
+
     async def complete_free(self, system: str, task: str) -> str:
-        """One plain question to the free model, with no tools (used by helper agents)."""
-        reply = await asyncio.to_thread(
-            free_brain.chat, self.cfg.free_base_url, os.environ.get("LUMI_FREE_API_KEY", ""), self.cfg.free_model,
-            [{"role": "system", "content": system}, {"role": "user", "content": task}])
+        """One plain question to the free brains, with no tools (used by helper agents)."""
+        reply = await self._free_chat([{"role": "system", "content": system}, {"role": "user", "content": task}])
         return (reply.get("content") or "").strip()
 
     async def _converse_free(self, text: str) -> None:
@@ -290,12 +316,9 @@ class Brain:
         self.memory.log("user", text)
         self.messages.append({"role": "user", "content": text})
         tools = free_brain.to_function_tools(self.registry.schemas())
-        key = os.environ.get("LUMI_FREE_API_KEY", "")
         try:
             for _ in range(MAX_TOOL_ROUNDS):
-                reply = await asyncio.to_thread(
-                    free_brain.chat, self.cfg.free_base_url, key, self.cfg.free_model,
-                    [{"role": "system", "content": self._system}] + self.messages, tools)
+                reply = await self._free_chat([{"role": "system", "content": self._system}] + self.messages, tools)
                 calls = reply.get("tool_calls") or []
                 content = reply.get("content") or ""
                 if not calls:
@@ -303,7 +326,7 @@ class Brain:
                     self.memory.log("assistant", content)
                     await self.hub.broadcast({"type": "delta", "text": content or "Done."})
                     return
-                self.messages.append({"role": "assistant", "content": content, "tool_calls": calls})
+                self.messages.append({"role": "assistant", "content": content, "tool_calls": calls, "_by": reply["_by"]})
                 blocks = []
                 for call in calls:
                     fn = call.get("function") or {}

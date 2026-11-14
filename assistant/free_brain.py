@@ -12,16 +12,38 @@ import urllib.error
 import urllib.request
 
 PROVIDERS = {
-    "gemini": {"label": "Google Gemini (free tier, online)", "needs_key": True,
+    "gemini": {"label": "Google Gemini (free key from Google AI Studio, online)", "needs_key": True, "key_env": "LUMI_GEMINI_KEY",
                "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
                "key_help": "Create a free key at https://aistudio.google.com/apikey (Google account, no card)."},
-    "groq": {"label": "Groq (free tier, online)", "needs_key": True,
+    "groq": {"label": "Groq (free tier, online)", "needs_key": True, "key_env": "LUMI_GROQ_KEY",
              "base_url": "https://api.groq.com/openai/v1",
              "key_help": "Create a free key at https://console.groq.com/keys (no card)."},
-    "ollama": {"label": "Ollama (runs on this PC, fully private, needs a strong PC)", "needs_key": False,
+    "ollama": {"label": "Ollama (runs on this PC, private, works offline)", "needs_key": False, "key_env": "",
                "base_url": "http://localhost:11434/v1",
                "key_help": "Install Ollama from https://ollama.com and download a model that supports tools."},
 }
+
+
+def chain(cfg) -> list[dict]:
+    """The free brains to use, in order: [{"name", "base_url", "model", "key_env"}]."""
+    brains = [b for b in cfg.brains if b.get("base_url") and b.get("model")]
+    if not brains and cfg.free_base_url and cfg.free_model:          # settings from before several brains existed
+        brains = [{"name": "free", "base_url": cfg.free_base_url, "model": cfg.free_model, "key_env": "LUMI_FREE_API_KEY"}]
+    return brains
+
+
+def for_provider(messages: list[dict], name: str) -> list[dict]:
+    """History as one provider should receive it. Tool calls made by a different provider keep
+    only the standard fields, because each provider adds private extras the others reject."""
+    out = []
+    for m in messages:
+        m = dict(m)
+        made_by = m.pop("_by", None)
+        if m.get("tool_calls") and made_by != name:
+            m["tool_calls"] = [{"id": c.get("id"), "type": "function", "function": c.get("function")}
+                               for c in m["tool_calls"]]
+        out.append(m)
+    return out
 
 
 class FreeAPIError(Exception):

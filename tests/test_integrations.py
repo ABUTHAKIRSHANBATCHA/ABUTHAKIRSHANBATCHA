@@ -342,11 +342,11 @@ def test_voice_lock_is_inactive_without_the_model(tmp_path, monkeypatch):
 # --------------------------------------------------------------------- setup
 
 def test_setup_wizard_writes_config_and_secrets(tmp_path, monkeypatch):
-    answers = iter(["Lumi", "Abu", "AED", "4", "sk-test-key", "", "y", "abu@gmail.com", "", "", "mail-pass",
+    answers = iter(["Lumi", "Abu", "AED", "", "", "y", "sk-test-key", "", "y", "abu@gmail.com", "", "", "mail-pass",
                     "D:/Projects", "D:/Projects/Marina", "", "y"])
     said, installed = [], []
     setup_wizard.run(tmp_path, ask=lambda _: next(answers), say=said.append,
-                     install_voice=lambda model, say: installed.append(model))
+                     install_voice=lambda model, say: installed.append(model), list_models=lambda url, key: [])
     config = json.loads((tmp_path / "config.json").read_text())
     assert config["name"] == "Lumi" and config["owner"] == "Abu" and config["currency"] == "AED"
     assert config["email"]["enabled"] and config["email"]["imap_host"] == "imap.gmail.com"
@@ -359,7 +359,8 @@ def test_setup_wizard_writes_config_and_secrets(tmp_path, monkeypatch):
 
     # Running it again and pressing Enter keeps every answer.
     keep = iter([""] * 20)
-    setup_wizard.run(tmp_path, ask=lambda _: next(keep), say=said.append, install_voice=lambda *a: None)
+    setup_wizard.run(tmp_path, ask=lambda _: next(keep), say=said.append, install_voice=lambda *a: None,
+                     list_models=lambda url, key: [])
     assert json.loads((tmp_path / "config.json").read_text()) == config
     assert "ANTHROPIC_API_KEY=sk-test-key" in (tmp_path / "secrets.env").read_text()
 
@@ -669,7 +670,7 @@ def test_free_brain_talks_uses_tools_and_asks_approval(tmp_path, monkeypatch, pr
     seen.clear()
     before = len(brain.messages)
     asyncio.run(brain.handle("one more", sink=sink))
-    assert "limit is used up" in next(e["text"] for e in seen if e["type"] == "error") and len(brain.messages) == before
+    assert "reached its limit" in next(e["text"] for e in seen if e["type"] == "error") and len(brain.messages) == before
 
     FakeProvider.status, FakeProvider.replies = 200, [{"role": "assistant", "content": "Market looks small."}]
     out = asyncio.run(brain.registry.tools["ask_helper"].handler(helper="business_analyst", task="BIM audits in Dubai"))
@@ -677,17 +678,96 @@ def test_free_brain_talks_uses_tools_and_asks_approval(tmp_path, monkeypatch, pr
     assert "cannot search the web" in FakeProvider.requests[-1]["messages"][0]["content"]
 
 
-def test_setup_offers_free_brains_first(tmp_path, provider, monkeypatch):
-    monkeypatch.setitem(free_brain.PROVIDERS["gemini"], "base_url", provider)
-    answers = iter(["", "Abu", "", "", "free-key", "flash-free", "", "n", "", "", "", "n"])
+def test_setup_configures_several_free_brains(tmp_path, provider, monkeypatch):
+    for name in ("gemini", "groq", "ollama"):
+        monkeypatch.setitem(free_brain.PROVIDERS[name], "base_url", provider + "/" + name)
+    listed = {"gemini": ["flash-free", "pro-paid"], "groq": ["fast-70b"], "ollama": ["qwen3:8b"]}
+    lister = lambda url, key: listed[url.rsplit("/", 1)[1]]
+    #          name owner curr  gemini key+model      groq key+model       ollama model  first    claude  tg  email  proj watch log voice
+    answers = iter(["", "Abu", "", "g-key", "flash-free", "q-key", "fast-70b", "qwen3:8b", "groq", "",    "", "n",   "",  "",   "", "n"])
     said = []
-    setup_wizard.run(tmp_path, ask=lambda _: next(answers), say=said.append)   # Enter = option 1, the free one
+    setup_wizard.run(tmp_path, ask=lambda _: next(answers), say=said.append, list_models=lister)
     config = json.loads((tmp_path / "config.json").read_text())
-    assert config["provider"] == "free" and config["free_model"] == "flash-free" and config["free_base_url"] == provider
-    assert "LUMI_FREE_API_KEY=free-key" in (tmp_path / "secrets.env").read_text()
-    assert any("flash-free" in line and "pro-paid" in line for line in said)             # listed from the provider
+    assert config["provider"] == "free" and [b["name"] for b in config["brains"]] == ["groq", "gemini", "ollama"]
+    assert config["brains"][1] == {"name": "gemini", "base_url": provider + "/gemini", "model": "flash-free",
+                                   "key_env": "LUMI_GEMINI_KEY"}
+    secrets = (tmp_path / "secrets.env").read_text()
+    assert "LUMI_GEMINI_KEY=g-key" in secrets and "LUMI_GROQ_KEY=q-key" in secrets
     assert not any("brain offline" in line for line in said)
-    assert free_brain.list_models(provider, "k") == ["flash-free", "pro-paid"]
+
+    keep = iter([""] * 30)                                   # run again, Enter everywhere: nothing changes
+    setup_wizard.run(tmp_path, ask=lambda _: next(keep), say=said.append, list_models=lister)
+    assert json.loads((tmp_path / "config.json").read_text())["brains"] == config["brains"]
+
+    # Only Gemini, set up with the older single-brain settings: carried over.
+    old = tmp_path / "old"
+    old.mkdir()
+    (old / "config.json").write_text(json.dumps({"provider": "free", "brain_choice": "gemini", "free_model": "flash-free",
+                                                 "free_base_url": "x"}))
+    (old / "secrets.env").write_text("LUMI_FREE_API_KEY=legacy-key\n")
+    keep = iter([""] * 30)
+    setup_wizard.run(old, ask=lambda _: next(keep), say=said.append,
+                     list_models=lambda url, key: listed["gemini"] if url.endswith("gemini") else [])
+    migrated = json.loads((old / "config.json").read_text())
+    assert [(b["name"], b["model"]) for b in migrated["brains"]] == [("gemini", "flash-free")] and "free_model" not in migrated
+    assert "LUMI_GEMINI_KEY=legacy-key" in (old / "secrets.env").read_text()
+
+
+def test_free_brains_take_over_from_each_other(tmp_path, monkeypatch, provider):
+    """Gemini hits its limit -> Groq answers; Groq is unreachable -> Ollama answers."""
+    monkeypatch.setenv("LUMI_GEMINI_KEY", "g-key")
+    brains = [{"name": "gemini", "base_url": provider + "/gemini", "model": "flash", "key_env": "LUMI_GEMINI_KEY"},
+              {"name": "groq", "base_url": "http://127.0.0.1:9/v1", "model": "fast", "key_env": "LUMI_GROQ_KEY"},
+              {"name": "ollama", "base_url": provider + "/ollama", "model": "qwen3:8b", "key_env": ""}]
+    app = make_app(tmp_path, monkeypatch, provider="free", brains=brains)
+    brain = app.state.brain
+    assert brain.free and brain.brain_name == "free: flash (+2 backup)"
+    seen = []
+
+    async def sink(event):
+        seen.append(event)
+
+    FakeProvider.replies = [{"role": "assistant", "content": "From Gemini.", "tool_calls": None}]
+    asyncio.run(brain.handle("hello", sink=sink))
+    assert FakeProvider.requests[-1]["auth"] == "Bearer g-key" and brain.active_free == "gemini"
+
+    calls_before = len(FakeProvider.requests)
+    real_chat = free_brain.chat
+
+    def limited(base_url, key, model, messages, tools=None):          # Gemini is now out of quota
+        if base_url.endswith("/gemini"):
+            raise free_brain.FreeAPIError(429, "quota exceeded")
+        return real_chat(base_url, key, model, messages, tools)
+
+    monkeypatch.setattr(free_brain, "chat", limited)
+    FakeProvider.replies = [
+        {"role": "assistant", "content": "", "tool_calls": [{**call("c1", "get_system_status", {}),
+                                                            "extra_content": {"private": "ollama-only"}}]},
+        {"role": "assistant", "content": "From Ollama."}]
+    seen.clear()
+    asyncio.run(brain.handle("status please", sink=sink))
+    assert [e["text"] for e in seen if e["type"] == "delta"] == ["From Ollama."]
+    assert {"type": "brain", "name": "free: qwen3:8b (+2 backup)"} in seen            # the screen is told
+    assert brain.active_free == "ollama" and set(brain.resting) == {"gemini", "groq"}
+    sent = FakeProvider.requests[calls_before:]
+    assert all(r["model"] == "qwen3:8b" and r["auth"] is None for r in sent)
+    assert not any("_by" in m for r in sent for m in r["messages"])                  # internal marker never sent
+    assert sent[1]["messages"][-2]["tool_calls"][0]["extra_content"] == {"private": "ollama-only"}   # own extras kept
+
+    # Gemini recovers: it is used again, and gets Ollama's tool call without Ollama's private extras.
+    monkeypatch.setattr(free_brain, "chat", real_chat)
+    brain.resting.clear()
+    FakeProvider.replies = [{"role": "assistant", "content": "Gemini again."}]
+    asyncio.run(brain.handle("and now", sink=sink))
+    back = FakeProvider.requests[-1]
+    assert back["model"] == "flash" and brain.active_free == "gemini"
+    theirs = next(m for m in back["messages"] if m.get("tool_calls"))["tool_calls"][0]
+    assert set(theirs) == {"id", "type", "function"}
+
+    monkeypatch.setattr(free_brain, "chat", lambda *a, **k: (_ for _ in ()).throw(free_brain.FreeAPIError(429, "quota")))
+    seen.clear()
+    asyncio.run(brain.handle("anyone", sink=sink))
+    assert "Every free brain has reached its limit" in next(e["text"] for e in seen if e["type"] == "error")
 
 
 def test_installation_check_reports_each_part_without_secrets(tmp_path, provider, monkeypatch):
@@ -696,7 +776,7 @@ def test_installation_check_reports_each_part_without_secrets(tmp_path, provider
         monkeypatch.delenv(key, raising=False)
     said = []
     rows = {item: (status, detail) for status, item, detail in check.run(tmp_path, say=said.append)}
-    assert rows["Brain"][0] == check.FAIL and "option 1" in rows["Brain"][1]            # nothing set up yet
+    assert rows["Brain"][0] == check.FAIL                                                # nothing set up yet
     assert rows["Telegram"][0] == check.OFF and rows["Email"][0] == check.OFF
     assert rows["Projects folder"][0] == check.WARN and rows["Settings file"][0] == check.WARN
 
@@ -710,12 +790,11 @@ def test_installation_check_reports_each_part_without_secrets(tmp_path, provider
                             {"role": "assistant", "content": None, "tool_calls": [call("c1", "get_time", {})]}]
     rows = {item: (status, detail) for status, item, detail in check.run(tmp_path, say=said.append)}
     monkeypatch.delenv("LUMI_FREE_API_KEY", raising=False)
-    assert rows["Brain"] == (check.OK, "free model flash-free answered: 'ready'")
-    assert rows["Brain can use tools"] == (check.OK, "yes")
+    assert rows["Brain 1: free"] == (check.OK, "flash-free answered 'ready' and can use tools")
     assert rows["Projects folder"][0] == check.OK and "1 project folders" in rows["Projects folder"][1]
     assert rows["Watching: Gone"][0] == check.FAIL
     report = (tmp_path / "lumi-check.txt").read_text()
-    assert "super-secret-key" not in report and "[OK  ] Brain:" in report and "1 problem(s)" in report
+    assert "super-secret-key" not in report and "[OK  ] Brain 1: free:" in report and "1 problem(s)" in report
 
 
 def test_free_tool_format_and_bom_files(tmp_path):
@@ -744,7 +823,8 @@ def test_ollama_setup_picks_tests_and_saves_a_model(tmp_path):
     assert o.candidates_for(8)[0] == "qwen3:8b" and o.candidates_for(32)[0] == "gpt-oss:20b"
     assert o.candidates_for(32, vram_gb=6)[0] == "qwen3:8b"            # a 6 GB card: the model that fits on it
     assert o.candidates_for(16, vram_gb=16)[0] == "gpt-oss:20b"
-    (tmp_path / "config.json").write_text(json.dumps({"name": "Lumi", "provider": "claude"}))
+    (tmp_path / "config.json").write_text(json.dumps({"name": "Lumi", "provider": "claude",
+                                                      "brains": [{"name": "gemini", "model": "flash"}]}))
     said, ran = [], []
 
     def sh(argv, **kw):
@@ -755,11 +835,11 @@ def test_ollama_setup_picks_tests_and_saves_a_model(tmp_path):
     assert o.run(tmp_path, ram_gb=16, works=lambda m: (True, ""), **common) is True
     assert [a[-1] for a in ran] == ["qwen3:8b", "llama3.1:8b"]         # fell back to the next model
     config = json.loads((tmp_path / "config.json").read_text())
-    assert config == {"name": "Lumi", "provider": "free", "brain_choice": "ollama",
-                      "free_base_url": "http://localhost:11434/v1", "free_model": "llama3.1:8b"}
+    ollama = {"name": "ollama", "base_url": "http://localhost:11434/v1", "model": "llama3.1:8b", "key_env": ""}
+    assert config == {"name": "Lumi", "provider": "free", "brains": [{"name": "gemini", "model": "flash"}, ollama]}
 
     # A model that cannot use tools is rejected and the saved brain is left alone.
     assert o.run(tmp_path, wanted="tiny:1b", ram_gb=16, works=lambda m: (False, "did not use the tool"), **common) is False
-    assert json.loads((tmp_path / "config.json").read_text())["free_model"] == "llama3.1:8b"
+    assert json.loads((tmp_path / "config.json").read_text())["brains"][1]["model"] == "llama3.1:8b"
     assert any("not suitable" in line for line in said)
     assert o.run(tmp_path, ram_gb=4, works=lambda m: (True, ""), **common) and any("less than the 8 GB" in l for l in said)
