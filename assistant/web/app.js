@@ -141,6 +141,15 @@
       const bar = el("u"); bar.style.height = `${(m.income / top) * 100}%`;
       return tipOn(el("i", null, bar), `${monthName(m.month)}: income ${cash(m.income)}, spent ${cash(m.expense)}, net ${cash(m.net)}`);
     }));
+    $("watch-section").hidden = !d.watch.sources.length;
+    $("watch").replaceChildren(...(d.watch.events.length ? d.watch.events : [{ at: "", source: "Watching", kind: "", detail:
+      d.watch.sources.map((s) => s.name).join(", ") + " - no changes yet" }]).map((e) =>
+      el("li", null, el("b", { textContent: `${e.source}${e.kind ? " - " + e.kind.toUpperCase() : ""}${e.at ? "  " + e.at.slice(5) : ""}` }),
+        el("span", { textContent: e.detail }))));
+    $("tasks-section").hidden = !d.tasks.length;
+    $("tasks").replaceChildren(...d.tasks.map((t) =>
+      el("li", null, el("b", { textContent: `${t.run_at}${t.repeat !== "none" ? "  " + t.repeat.toUpperCase() : ""}` }),
+        el("span", { textContent: t.instruction }))));
     $("idea-count").textContent = d.idea_count || "";
     if (d.ideas.length) $("ideas").replaceChildren(...d.ideas.map((n) =>
       el("li", null, el("span", { textContent: n.title }), el("small", { textContent: prettyDay(n.updated) }))));

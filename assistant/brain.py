@@ -13,7 +13,7 @@ import anthropic
 from .tools import Registry
 
 IDLE_RESET_SECONDS = 60 * 60
-CONFIRM_TIMEOUT_SECONDS = 120
+CONFIRM_TIMEOUT_SECONDS = 600     # long enough to answer from a phone
 MAX_TOOL_ROUNDS = 25
 
 
@@ -36,6 +36,16 @@ answer in Tamil script, because the Tamil voice can only pronounce Tamil script;
 and product names (Revit, Navisworks, IFC, clash) in English. Speech recognition is imperfect: \
 if a message looks garbled, work out the most likely meaning from context, and ask a short \
 question only when a wrong guess would matter.
+
+Working without {cfg.owner} present
+{cfg.owner} wants work to carry on when they are away. When asked to do something later or \
+regularly ("every morning", "at six", "when I am out"), set it up with task_schedule and \
+confirm the time back. A request that begins "Scheduled task" is one of those running now: \
+nobody is at the screen, so do the whole job with your tools, do not ask questions, and finish \
+with a short report of what was done and anything that needs a decision; the report is sent to \
+their phone. Steps that need approval are sent to the phone as well and may wait several \
+minutes; if one is declined or gets no answer, skip it and say so in the report. When you are \
+asked what changed in the project folders or logs, use recent_changes.
 
 Acting on the computer
 Email, when {cfg.owner} has switched it on, works only with their approval: each look at the \

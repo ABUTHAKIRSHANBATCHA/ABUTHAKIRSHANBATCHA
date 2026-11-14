@@ -37,6 +37,9 @@ class Config:
     email: dict = field(default_factory=lambda: {
         "enabled": False, "address": "", "imap_host": "imap.gmail.com",
         "smtp_host": "smtp.gmail.com", "smtp_port": 587, "ask_before_reading": True})
+    # Folders and log files to watch: [{"name": "...", "path": "...", "kind": "folder" or "log"}]
+    watch: list[dict] = field(default_factory=list)
+    watch_seconds: int = 30          # how often they are checked
     voice_lock: bool = True          # once a voice is enrolled, spoken commands need a recognised voice
     voice_threshold: float = 0.6     # higher = stricter voice match
 

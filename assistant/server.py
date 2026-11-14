@@ -21,6 +21,9 @@ from pydantic import BaseModel
 from .brain import Brain
 from .config import DATA_DIR, WEB_DIR, Config
 from .memory import Memory
+from .tasks import Tasks
+from .watcher import Watcher
+from .tools import autonomy, connectors
 from .telegram import TelegramBridge, http_api
 from .voice_id import VoiceID
 from .tools import build_registry
@@ -138,10 +141,12 @@ def create_app(cfg: Config, devices: Devices | None = None, telegram_api=None) -
     projects = Projects(cfg.data_path / "projects")
     ledger = Ledger(cfg.data_path / "money", cfg.currency)
     brain = Brain(cfg, build_registry(cfg, hub, memory, projects, ledger), hub, memory)
+    watcher = Watcher(cfg.watch, cfg.data_path / "watch")
+    tasks = Tasks(cfg.data_path / "tasks.json")
 
     def dashboard() -> dict:
         return {"type": "dashboard", "projects": projects.summary(), "money": ledger.dashboard(),
-                **memory.tracking()}
+                "watch": watcher.summary(), "tasks": tasks.summary(), **memory.tracking()}
 
     async def answer(text: str) -> None:
         await brain.handle(text)
@@ -162,6 +167,55 @@ def create_app(cfg: Config, devices: Devices | None = None, telegram_api=None) -
     telegram = TelegramBridge(telegram_api, brain, hub, devices, cfg.data_path / "telegram.json",
                               after_turn=refresh) if telegram_api else None
 
+    async def notify(text: str) -> str:
+        """Reach the owner wherever they are: every screen, and the phone through Telegram."""
+        await hub.broadcast({"type": "card", "title": cfg.name, "text": text, "url": ""})
+        reached = await telegram.notify(text) if telegram else 0
+        return ("Sent to the phone and the screens." if reached else
+                "Shown on the screens only: Telegram is not set up or not paired, so the phone was not reached.")
+
+    autonomy.register(brain.registry, tasks, watcher, notify)
+
+    async def run_task(task: dict) -> None:
+        parts: list[str] = []
+
+        async def sink(event: dict) -> None:
+            if event["type"] in ("delta", "error"):
+                parts.append(event["text"])
+            elif event["type"] == "confirm_request" and telegram:
+                detail = event["input"].get("command") or json.dumps(event["input"], ensure_ascii=False)[:1500]
+                await telegram.notify(f"Approval needed for a scheduled task: {event['name'].replace('_', ' ')}"
+                                      f"\n\n{detail}\n\nReply YES or NO.")
+
+        await brain.handle(f"Scheduled task, running now while I am away: {task['instruction']}", sink=sink)
+        result = "".join(parts).strip() or "Finished with nothing to report."
+        tasks.record(task["id"], result)
+        await notify(f"Task finished: {task['instruction']}\n\n{result}")
+        await refresh()
+
+    async def task_loop() -> None:
+        while True:
+            for task in tasks.take_due():
+                asyncio.create_task(run_task(task))
+            await asyncio.sleep(20)
+
+    async def watch_once() -> list[dict]:
+        events = await asyncio.to_thread(watcher.scan)
+        if events:
+            await refresh()
+            for connector in cfg.connectors:           # dashboards you marked "auto": true are kept in step
+                if connector.get("auto") and connector.get("url"):
+                    await asyncio.to_thread(connectors.call, connector, {"events": events, "status": dashboard()})
+        return events
+
+    async def watch_loop() -> None:
+        while True:
+            try:
+                await watch_once()
+            except Exception:
+                pass                                    # an unreadable folder must not stop the watcher
+            await asyncio.sleep(max(5, cfg.watch_seconds))
+
     async def stats_loop() -> None:
         while True:
             if hub.sockets:
@@ -170,16 +224,22 @@ def create_app(cfg: Config, devices: Devices | None = None, telegram_api=None) -
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        tasks = [asyncio.create_task(stats_loop())]
+        tasks_running = [asyncio.create_task(stats_loop())]
+        running = tasks_running
         if telegram:
-            tasks.append(asyncio.create_task(telegram.run()))
+            running.append(asyncio.create_task(telegram.run()))
+        running.append(asyncio.create_task(task_loop()))
+        if watcher.sources:
+            running.append(asyncio.create_task(watch_loop()))
         yield
-        for task in tasks:
+        for task in running:
             task.cancel()
 
     app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.hub, app.state.devices, app.state.brain = hub, devices, brain
     app.state.voice, app.state.telegram = voice, telegram
+    app.state.tasks, app.state.watcher = tasks, watcher
+    app.state.run_task, app.state.watch_once = run_task, watch_once
 
     def is_local(scope) -> bool:
         """True only for connections from this PC arriving on the loopback listener."""

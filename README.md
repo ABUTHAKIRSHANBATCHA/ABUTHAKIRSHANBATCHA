@@ -19,12 +19,14 @@ It is called Lumi; the name is a setting you can change.
 | Tracking dashboard: project progress by stage, requests per day, most used actions, saved ideas (right side on PC; MENU > TRACKING DASHBOARD on phone) | Working |
 | Wake phrase: press `"HEY LUMI"`, then say "Hey Lumi, ..." to give a command; follow-ups within 20 seconds need no wake phrase | Logic tested with a simulated microphone; not yet tried with a real one |
 | Money tracking: record income and expenses per business by voice; income chart on the dashboard | Working (recording by voice needs the Claude brain) |
-| Hologram mode: camera view with a 3D building model you move with your hands (pinch to rotate, fist to move, two pinches to scale, spread two open palms to explode the levels); also by voice ("Hey Lumi, explode the model") | Gesture logic and hand-tracking library tested; not yet tried with real hands on a real camera |
+| Hologram mode: camera view with a 3D building model you move with your hands (pinch to rotate, fist to move, two pinches to scale, spread two open palms to explode the levels); also by voice ("Hey Lumi, explode the model") | Tested with real photos of hands fed in as the camera: fist and open hands are recognised, pointing and victory signs trigger nothing. Pinch and moving hands are not yet tested on a live camera; a thumbs-up reads as a fist |
 | Voice lock: only enrolled voices can give spoken commands; adding another voice needs your approval; runs on your PC | Tested with recordings of two different people; not yet with your voice or a phone microphone |
 | Telegram: message Lumi from your phone anywhere, approve actions by replying YES or NO | Tested against a simulated Telegram; not yet with a real bot |
 | Email (off until you turn it on): read the inbox, read a message, send or reply, each only after your approval | Tested against simulated mail servers; not yet with a real mailbox |
 | Helper agents: researcher and business analyst (with web search), BIM specialist, writer | Tested with a stand-in model; needs the Claude brain |
 | Connectors: send data to your other apps, such as your own dashboard, each call approved by you | Working |
+| Folder and log watching: new, changed and removed files and new log lines appear on the dashboard and can be sent to your own dashboard automatically | Working |
+| Scheduled work: Lumi does a job at a set time, once or repeating, and reports to your phone; approvals reach you on Telegram | Tested with a stand-in model; needs the Claude brain |
 | Find installed BIM software, launch it, find model files (.rvt .nwd .ifc .dwg ...) | Written for Windows; not yet run on a Windows PC |
 | Live Revit model queries (model info, element counts, warnings, levels, sheets, links) | Written; not yet run inside Revit |
 | Brain (Claude) | Needs your API key; without one it only opens things and reports status |
@@ -111,6 +113,38 @@ Lumi hands bigger jobs to helpers and gives you the conclusion:
 | Writer | Finished emails, proposals and reports |
 
 Try: "research the BIM audit market in Dubai and tell me if it is worth starting".
+
+## Keep dashboards updated from folders and logs
+
+List the folders and log files to watch in `setup.bat`, or in `config.json`:
+
+```json
+"watch": [
+  { "name": "Marina models", "path": "D:/Projects/Marina", "kind": "folder" },
+  { "name": "Clash log", "path": "D:/Projects/Marina/clash.log", "kind": "log" }
+]
+```
+
+Every 30 seconds Lumi checks them. Files added, changed or removed, and new log lines, appear
+under FOLDER AND LOG UPDATES on the dashboard and in `/api/status`. Ask "what changed in the
+Marina folder today?" to hear a summary.
+
+To push each change to your own 3D dashboard as it happens, add `"auto": true` to its
+connector (next section). Lumi then posts `{"events": [...], "status": {...}}` to it after
+every change, without asking each time. Connectors without `"auto": true` still ask.
+
+## Work while you are away
+
+- "Every day at 8 am, check the Marina folder and send me a summary."
+- "At 6 pm, back up today's models to the archive folder."
+- "What is scheduled?" / "Cancel the backup task."
+
+At the set time Lumi does the job and sends the result to your phone on Telegram and to the
+screens. If a step needs approval (a command, a file write, an email), the request goes to
+Telegram and waits up to 10 minutes for YES or NO; with no answer that step is skipped and
+the report says so. Lumi never runs commands, writes files or sends email unattended without
+that approval. The PC must be on and Lumi running. Tasks missed while the PC was off run
+once when it starts again.
 
 ## Connect your own dashboard and other apps
 

@@ -210,5 +210,6 @@
 
   setMirror(true);
   // feed(): lets tests (or another tracker) supply hand landmarks directly.
-  window.Holo = { open, close, act, control, feed: (h) => { fed = h; }, get active() { return active; } };
+  window.Holo = { open, close, act, control, feed: (h) => { fed = h; }, get active() { return active; },
+    get seen() { return hands.map((h) => Gestures.read(h)); } };
 })();

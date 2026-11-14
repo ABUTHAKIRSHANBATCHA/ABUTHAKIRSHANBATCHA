@@ -32,6 +32,12 @@ class TelegramBridge:
         self.chats: list[int] = json.loads(store.read_text()) if store.exists() else []
         self.offset = 0
 
+    async def notify(self, text: str) -> int:
+        """Message every paired chat; returns how many were reached."""
+        for chat in self.chats:
+            await self.send(chat, text)
+        return len(self.chats)
+
     async def send(self, chat: int, text: str) -> None:
         for start in range(0, len(text), 4000):          # Telegram's message size limit
             await asyncio.to_thread(self.api, "sendMessage", {"chat_id": chat, "text": text[start:start + 4000]})

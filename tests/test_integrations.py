@@ -332,7 +332,8 @@ def test_voice_lock_is_inactive_without_the_model(tmp_path, monkeypatch):
 # --------------------------------------------------------------------- setup
 
 def test_setup_wizard_writes_config_and_secrets(tmp_path, monkeypatch):
-    answers = iter(["Lumi", "Abu", "AED", "sk-test-key", "", "y", "abu@gmail.com", "", "", "mail-pass", "y"])
+    answers = iter(["Lumi", "Abu", "AED", "sk-test-key", "", "y", "abu@gmail.com", "", "", "mail-pass",
+                    "D:/Projects/Marina", "", "y"])
     said, installed = [], []
     setup_wizard.run(tmp_path, ask=lambda _: next(answers), say=said.append,
                      install_voice=lambda model, say: installed.append(model))
@@ -343,6 +344,7 @@ def test_setup_wizard_writes_config_and_secrets(tmp_path, monkeypatch):
     assert "ANTHROPIC_API_KEY=sk-test-key" in secrets and "LUMI_EMAIL_PASSWORD=mail-pass" in secrets
     assert "LUMI_TELEGRAM_TOKEN" not in secrets and "mail-pass" not in (tmp_path / "config.json").read_text()
     assert installed == [tmp_path / "data" / "voice" / MODEL_NAME]
+    assert config["watch"] == [{"name": "Marina", "path": "D:/Projects/Marina", "kind": "folder"}]
 
     # Running it again and pressing Enter keeps every answer.
     keep = iter([""] * 20)
@@ -355,3 +357,130 @@ def test_setup_wizard_writes_config_and_secrets(tmp_path, monkeypatch):
     load_secrets(tmp_path / "secrets.env")
     assert os.environ["ANTHROPIC_API_KEY"] == "sk-test-key" and os.environ["LUMI_EMAIL_PASSWORD"] == "from-environment"
     monkeypatch.delenv("ANTHROPIC_API_KEY")
+
+
+# ------------------------------------------------------- watcher and tasks
+
+from assistant.tasks import Tasks                     # noqa: E402
+from assistant.watcher import Watcher                 # noqa: E402
+
+
+def test_watcher_reports_folder_and_log_changes(tmp_path):
+    import datetime as dt
+    proj, log = tmp_path / "proj", tmp_path / "clash.log"
+    (proj / "models").mkdir(parents=True)
+    (proj / "models" / "tower.rvt").write_text("v1")
+    (proj / "~$tower.rvt").write_text("lock file")
+    log.write_text("old line\n")
+    sources = [{"name": "Marina", "path": str(proj), "kind": "folder"},
+               {"name": "Clash log", "path": str(log), "kind": "log"},
+               {"name": "Missing", "path": str(tmp_path / "nope"), "kind": "folder"}]
+    w = Watcher(sources, tmp_path / "watch")
+    assert w.scan() == []                                         # first look only remembers
+    assert w.scan() == []
+
+    (proj / "models" / "tower.rvt").write_text("version 2 is longer")
+    (proj / "site.ifc").write_text("x")
+    with log.open("a") as f:
+        f.write("12 new clashes in L03\nrun complete\nhalf written")
+    events = Watcher(sources, tmp_path / "watch").scan()          # state survives a restart
+    got = {(e["source"], e["kind"], e["detail"]) for e in events}
+    assert got == {("Marina", "added", "site.ifc"), ("Marina", "changed", "models/tower.rvt"),
+                   ("Clash log", "log", "12 new clashes in L03"), ("Clash log", "log", "run complete")}
+
+    (proj / "site.ifc").unlink()
+    with log.open("a") as f:
+        f.write(" line now finished\n")
+    events = w.__class__(sources, tmp_path / "watch").scan()
+    assert {(e["kind"], e["detail"]) for e in events} == {("removed", "site.ifc"), ("log", "half written line now finished")}
+
+    log.write_text("fresh after rotation\n")                      # log cleared: start again from the top
+    w2 = Watcher(sources, tmp_path / "watch")
+    assert [e["detail"] for e in w2.scan()] == ["fresh after rotation"]
+    assert w2.recent(2)[0]["detail"] == "fresh after rotation" and len(w2.recent(50, "marina")) == 3
+    summary = w2.summary()
+    assert summary["sources"][0]["files"] == 1 and summary["sources"][2]["files"] is None
+
+    for i in range(60):
+        (proj / f"sheet{i}.pdf").write_text("x")
+    assert [e["detail"] for e in w2.scan()] == ["60 files added"]  # bulk changes are summarised
+
+
+def test_tasks_run_once_or_repeat_and_survive_restart(tmp_path):
+    import datetime as dt
+    tasks = Tasks(tmp_path / "tasks.json")
+    assert "YYYY-MM-DD HH:MM" in tasks.add("x", "tomorrow 9am")
+    assert "Scheduled task" in tasks.add("send the weekly report", "2026-11-16 09:00", "weekly")
+    tasks.add("back up the model", "2026-11-14 18:00")
+    now = dt.datetime(2026, 11, 14, 18, 0, 30)
+    assert [t["instruction"] for t in tasks.take_due(now)] == ["back up the model"]
+    assert tasks.take_due(now) == []                               # a one-off never runs twice
+    later = dt.datetime(2026, 12, 1, 12, 0)                        # PC was off for two weeks
+    due = Tasks(tmp_path / "tasks.json").take_due(later)
+    assert [t["instruction"] for t in due] == ["send the weekly report"]
+    reloaded = Tasks(tmp_path / "tasks.json")
+    assert reloaded.items[0]["run_at"] == "2026-12-07 09:00"       # one catch-up run, then the next Monday
+    assert "Cancelled" in reloaded.cancel(reloaded.items[0]["id"]) and "No task" in reloaded.cancel("zzz")
+
+
+def test_scheduled_task_runs_unattended_and_reports_to_phone(tmp_path, monkeypatch):
+    received = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            received.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *a):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    api = FakeTelegram()
+    app = create_app(Config(
+        data_dir=str(tmp_path / "data"),
+        watch=[{"name": "Marina", "path": str(proj), "kind": "folder"}],
+        connectors=[{"name": "world_dashboard", "url": f"http://127.0.0.1:{server.server_port}/", "auto": True},
+                    {"name": "manual_only", "url": "http://127.0.0.1:9/"}],
+    ), Devices(tmp_path / "devices.json"), telegram_api=api)
+    brain, state = app.state.brain, app.state
+    state.telegram.chats.append(7)
+    target = tmp_path / "report.txt"
+    FakeStreamBrain(brain, [
+        message(tool_use("t1", "recent_changes", {}), tool_use("t2", "write_file", {"path": str(target), "contents": "r"})),
+        message(NS(type="text", text="Report written. One new model arrived."), stop="end_turn"),
+    ])
+
+    async def scenario():
+        assert await state.watch_once() == []
+        (proj / "tower.rvt").write_text("x")
+        events = await state.watch_once()
+        assert [e["detail"] for e in events] == ["tower.rvt"]
+        run = asyncio.create_task(state.run_task({"id": "abc123", "instruction": "write the daily report"}))
+        for _ in range(300):
+            if state.hub.pending:
+                break
+            await asyncio.sleep(0.01)
+        await state.telegram.on_text(7, "YES")                     # approved from the phone
+        await run
+
+    try:
+        asyncio.run(scenario())
+    finally:
+        server.shutdown()
+    assert len(received) == 1 and received[0]["events"][0]["detail"] == "tower.rvt"     # auto connector only
+    assert received[0]["status"]["watch"]["events"][0]["source"] == "Marina"
+    texts = [t for _, t in api.sent]
+    assert texts[0].startswith("Approval needed for a scheduled task: write file")
+    assert texts[1] == "Task finished: write the daily report\n\nReport written. One new model arrived."
+    assert target.read_text() == "r"
+    assert brain.messages[0]["content"].startswith("Scheduled task, running now while I am away: write the daily")
+    changes = json.loads(brain.messages[2]["content"][0]["content"])
+    assert changes["events"][0]["detail"] == "tower.rvt"
+    tools = brain.registry.tools
+    assert {"task_schedule", "task_list", "task_cancel", "notify_owner", "recent_changes"} <= set(tools)
+    assert asyncio.run(tools["notify_owner"].handler(message="hello")) == "Sent to the phone and the screens."

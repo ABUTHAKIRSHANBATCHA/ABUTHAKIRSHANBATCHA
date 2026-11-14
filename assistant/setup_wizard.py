@@ -77,6 +77,14 @@ def run(root: Path = ROOT, ask=input, say=print, install_voice=None) -> None:
         secret("Email app password", "LUMI_EMAIL_PASSWORD")
     config["email"] = mail
 
+    say("\n-- Folders and logs to watch --\nChanges show on the dashboard and can be sent to your own dashboard.")
+    watch = config.get("watch", [])
+    for kind, text in (("folder", "A project folder to watch"), ("log", "A log file to watch")):
+        path = ask(f"{text} (full path, Enter to skip): ").strip().strip('"')
+        if path and not any(w["path"] == path for w in watch):
+            watch.append({"name": Path(path).name or path, "path": path, "kind": kind})
+    config["watch"] = watch
+
     say("\n-- Voice lock --\nRecognises your voice on this PC so only you can give spoken commands (downloads about 60 MB).")
     model = root / "data" / "voice" / MODEL_NAME
     if yes("Install voice lock", model.exists()):

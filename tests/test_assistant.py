@@ -90,11 +90,16 @@ class FakeStreamBrain:
 
     def __init__(self, brain, turns):
         self.turns = iter(turns)
+        self.brain = brain
         brain.client = object()
         brain._stream_turn = self.next
 
     async def next(self):
-        return next(self.turns)
+        turn = next(self.turns)
+        for block in turn.content:                 # stream reply text as the real call does
+            if block.type == "text":
+                await self.brain.hub.broadcast({"type": "delta", "text": block.text})
+        return turn
 
 
 def tool_use(id, name, input):
