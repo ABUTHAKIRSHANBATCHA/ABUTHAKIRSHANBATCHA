@@ -737,3 +737,27 @@ def test_free_tool_format_and_bom_files(tmp_path):
     (tmp_path / "secrets.env").write_bytes(b"\xef\xbb\xbfLUMI_BOM_TEST=yes\n")
     load_secrets(tmp_path / "secrets.env")
     assert os.environ.pop("LUMI_BOM_TEST") == "yes"
+
+
+def test_ollama_setup_picks_tests_and_saves_a_model(tmp_path):
+    from assistant import ollama_setup as o
+    assert o.candidates_for(8)[0] == "qwen3:8b" and o.candidates_for(32)[0] == "gpt-oss:20b"
+    (tmp_path / "config.json").write_text(json.dumps({"name": "Lumi", "provider": "claude"}))
+    said, ran = [], []
+
+    def sh(argv, **kw):
+        ran.append(argv)
+        return NS(returncode=1 if argv[-1] == "qwen3:8b" else 0)       # the first model fails to download
+
+    common = dict(say=said.append, sh=sh, find=lambda: "ollama", up=lambda: True, wait=lambda s: None)
+    assert o.run(tmp_path, ram_gb=16, works=lambda m: (True, ""), **common) is True
+    assert [a[-1] for a in ran] == ["qwen3:8b", "llama3.1:8b"]         # fell back to the next model
+    config = json.loads((tmp_path / "config.json").read_text())
+    assert config == {"name": "Lumi", "provider": "free", "brain_choice": "ollama",
+                      "free_base_url": "http://localhost:11434/v1", "free_model": "llama3.1:8b"}
+
+    # A model that cannot use tools is rejected and the saved brain is left alone.
+    assert o.run(tmp_path, wanted="tiny:1b", ram_gb=16, works=lambda m: (False, "did not use the tool"), **common) is False
+    assert json.loads((tmp_path / "config.json").read_text())["free_model"] == "llama3.1:8b"
+    assert any("not suitable" in line for line in said)
+    assert o.run(tmp_path, ram_gb=4, works=lambda m: (True, ""), **common) and any("less than the 8 GB" in l for l in said)

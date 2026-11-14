@@ -77,6 +77,11 @@ or passwords, so it is safe to share.
 | 3. Ollama on this PC | Free | Install <https://ollama.com> and download a model that supports tools | Fully private and offline, but needs a strong PC (16 GB RAM or a good graphics card) and is the weakest of the four |
 | 4. Claude | Paid per use | A key from <https://platform.claude.com> with credit bought under Billing | Best quality; a Claude.ai chat subscription does not include this credit |
 
+**Ollama in one step:** double-click `install-ollama.bat`. It installs Ollama, downloads a
+model that fits your PC's memory, tests that the model can use tools, and makes it Lumi's
+brain. Models are stored in the `ollama-models` folder beside Lumi. To choose the model
+yourself: `install-ollama.bat llama3.1:8b`.
+
 Setup lists the models your key can use; pick one that supports tools (function calling).
 Free providers change their model names and limits often, so if a model stops working, run
 `setup.bat` again and pick another from the list.

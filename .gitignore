@@ -7,3 +7,4 @@ config.json
 secrets.env
 .pytest_cache/
 lumi-check.txt
+ollama-models/
