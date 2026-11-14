@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import time
 import uuid
+from types import SimpleNamespace
 
 import anthropic
+
+from . import free_brain
 
 from .tools import Registry
 
@@ -133,8 +137,18 @@ class Brain:
         helpers.register(registry, self)
 
     @property
+    def free(self) -> bool:
+        return self.cfg.provider == "free" and bool(self.cfg.free_base_url and self.cfg.free_model)
+
+    @property
     def online(self) -> bool:
-        return self.client is not None
+        return self.free or self.client is not None
+
+    @property
+    def brain_name(self) -> str:
+        if self.free:
+            return f"free: {self.cfg.free_model}"
+        return self.cfg.model if self.client is not None else "offline"
 
     def reset(self) -> None:
         self.messages.clear()
@@ -151,10 +165,23 @@ class Brain:
             await self.hub.broadcast({"type": "user", "text": text})
             await self.hub.broadcast({"type": "state", "state": "thinking"})
             try:
-                if self.online:
+                if self.free:
+                    await self._converse_free(text)
+                elif self.online:
                     await self._converse(text)
                 else:
                     await self._offline(text)
+            except free_brain.FreeAPIError as e:
+                if e.status == 429:
+                    await self._say_error("The free model's limit is used up for now. Try again in a minute; "
+                                          "the daily limit resets tomorrow.")
+                elif e.status in (401, 403) or "api key" in e.message.lower():
+                    await self._say_error("The free model's key was rejected. Run setup again and check the key.")
+                elif e.status == 0:
+                    await self._say_error(f"I cannot reach the free model at {self.cfg.free_base_url}. "
+                                          "Check the internet, or that Ollama is running.")
+                else:
+                    await self._say_error(f"The free model returned an error: {e.message}")
             except anthropic.AuthenticationError:
                 await self._say_error("The Claude API key was rejected. Check the key and restart me.")
             except anthropic.RateLimitError:
@@ -241,6 +268,54 @@ class Brain:
                 {"type": "text", "text": "(stopped after too many tool steps)"}]})
         except BaseException:
             # Leave history as it was before this utterance so the next one starts clean.
+            del self.messages[checkpoint:]
+            raise
+
+    # -------------------------------------------------------------- free model
+
+    async def complete_free(self, system: str, task: str) -> str:
+        """One plain question to the free model, with no tools (used by helper agents)."""
+        reply = await asyncio.to_thread(
+            free_brain.chat, self.cfg.free_base_url, os.environ.get("LUMI_FREE_API_KEY", ""), self.cfg.free_model,
+            [{"role": "system", "content": system}, {"role": "user", "content": task}])
+        return (reply.get("content") or "").strip()
+
+    async def _converse_free(self, text: str) -> None:
+        checkpoint = len(self.messages)
+        if not self.messages:
+            self._system = system_prompt(self.cfg, self.memory.prompt_section())
+        self.memory.log("user", text)
+        self.messages.append({"role": "user", "content": text})
+        tools = free_brain.to_function_tools(self.registry.schemas())
+        key = os.environ.get("LUMI_FREE_API_KEY", "")
+        try:
+            for _ in range(MAX_TOOL_ROUNDS):
+                reply = await asyncio.to_thread(
+                    free_brain.chat, self.cfg.free_base_url, key, self.cfg.free_model,
+                    [{"role": "system", "content": self._system}] + self.messages, tools)
+                calls = reply.get("tool_calls") or []
+                content = reply.get("content") or ""
+                if not calls:
+                    self.messages.append({"role": "assistant", "content": content})
+                    self.memory.log("assistant", content)
+                    await self.hub.broadcast({"type": "delta", "text": content or "Done."})
+                    return
+                self.messages.append({"role": "assistant", "content": content, "tool_calls": calls})
+                blocks = []
+                for call in calls:
+                    fn = call.get("function") or {}
+                    try:
+                        args = json.loads(fn.get("arguments") or "{}")
+                    except ValueError:
+                        args = None                         # reported to the model by _run_tool's validation
+                    blocks.append(SimpleNamespace(id=call.get("id") or uuid.uuid4().hex, name=fn.get("name", ""), input=args))
+                results = await asyncio.gather(*(self._run_tool(b) for b in blocks))
+                for block, result in zip(blocks, results):
+                    self.messages.append({"role": "tool", "tool_call_id": block.id, "content": result["content"]})
+                await self.hub.broadcast({"type": "state", "state": "thinking"})
+            await self._say_error("That took too many steps, so I stopped. Tell me how to continue.")
+            self.messages.append({"role": "assistant", "content": "(stopped after too many tool steps)"})
+        except BaseException:
             del self.messages[checkpoint:]
             raise
 

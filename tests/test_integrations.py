@@ -252,7 +252,7 @@ def test_helper_agent_runs_its_own_conversation(tmp_path, monkeypatch):
             return NS(stop_reason="end_turn", content=[NS(type="text", text="Three competitors found.")])
 
     tool = brain.registry.tools["ask_helper"]
-    assert asyncio.run(tool.handler(helper="researcher", task="x")) == "Helper agents need the Claude API key."
+    assert asyncio.run(tool.handler(helper="researcher", task="x")) .startswith("Helper agents need a brain.")
     brain.client = NS(beta=NS(messages=NS(stream=lambda **kw: FakeStream(kw))))
     out = asyncio.run(tool.handler(helper="researcher", task="Find BIM audit competitors in Dubai"))
     assert out == "Three competitors found." and len(calls) == 2                    # resumed after the pause
@@ -342,7 +342,7 @@ def test_voice_lock_is_inactive_without_the_model(tmp_path, monkeypatch):
 # --------------------------------------------------------------------- setup
 
 def test_setup_wizard_writes_config_and_secrets(tmp_path, monkeypatch):
-    answers = iter(["Lumi", "Abu", "AED", "sk-test-key", "", "y", "abu@gmail.com", "", "", "mail-pass",
+    answers = iter(["Lumi", "Abu", "AED", "4", "sk-test-key", "", "y", "abu@gmail.com", "", "", "mail-pass",
                     "D:/Projects", "D:/Projects/Marina", "", "y"])
     said, installed = [], []
     setup_wizard.run(tmp_path, ask=lambda _: next(answers), say=said.append,
@@ -584,3 +584,103 @@ def test_file_sent_from_phone_is_filed_and_dashboard_follows(tmp_path, monkeypat
     assert not any(e.get("confirm") for e in [])                                            # (filing tools are approval-free)
     tools = brain.registry.tools
     assert not tools["file_to_project"].confirm and not tools["project_folder_create"].confirm
+
+
+# ---------------------------------------------------------------- free brain
+
+from assistant import free_brain                      # noqa: E402
+
+
+class FakeProvider(BaseHTTPRequestHandler):
+    """A stand-in for a free OpenAI-compatible provider."""
+    requests, replies, status = [], [], 200
+
+    def do_GET(self):
+        self._send(200, {"data": [{"id": "models/flash-free"}, {"id": "models/pro-paid"}]})
+
+    def do_POST(self):
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        FakeProvider.requests.append({"auth": self.headers.get("Authorization"), **body})
+        if FakeProvider.status != 200:
+            return self._send(FakeProvider.status, {"error": {"message": "quota exceeded"}})
+        self._send(200, {"choices": [{"message": FakeProvider.replies.pop(0)}]})
+
+    def _send(self, code, payload):
+        self.send_response(code)
+        self.end_headers()
+        self.wfile.write(json.dumps(payload).encode())
+
+    def log_message(self, *a):
+        pass
+
+
+@pytest.fixture
+def provider():
+    FakeProvider.requests, FakeProvider.replies, FakeProvider.status = [], [], 200
+    server = HTTPServer(("127.0.0.1", 0), FakeProvider)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{server.server_port}/v1"
+    server.shutdown()
+
+
+def call(id, name, args):
+    return {"id": id, "type": "function", "function": {"name": name, "arguments": json.dumps(args)}}
+
+
+def test_free_brain_talks_uses_tools_and_asks_approval(tmp_path, monkeypatch, provider):
+    monkeypatch.setenv("LUMI_FREE_API_KEY", "free-key")
+    app = make_app(tmp_path, monkeypatch, provider="free", free_base_url=provider, free_model="flash-free")
+    brain, hub = app.state.brain, app.state.hub
+    assert brain.online and brain.free and brain.brain_name == "free: flash-free"
+    target = tmp_path / "note.txt"
+    FakeProvider.replies = [
+        {"role": "assistant", "content": None, "tool_calls": [
+            call("c1", "get_system_status", {}), call("c2", "write_file", {"path": str(target), "contents": "hi"})]},
+        {"role": "assistant", "content": "Saved your note."},
+        {"role": "assistant", "content": "", "tool_calls": [{"id": "c3", "function": {"name": "write_file", "arguments": "{broken"}}]},
+        {"role": "assistant", "content": "I could not do that."},
+    ]
+    seen = []
+
+    async def sink(event):
+        seen.append(event)
+        if event["type"] == "confirm_request":
+            hub.resolve(event["id"], True)
+
+    asyncio.run(brain.handle("save a note", sink=sink))
+    assert target.read_text() == "hi" and [e["text"] for e in seen if e["type"] == "delta"] == ["Saved your note."]
+    first, second = FakeProvider.requests[0], FakeProvider.requests[1]
+    assert first["auth"] == "Bearer free-key" and first["model"] == "flash-free"
+    assert first["messages"][0]["role"] == "system" and "Lumi" in first["messages"][0]["content"]
+    names = [t["function"]["name"] for t in first["tools"]]
+    assert "file_to_project" in names and "additionalProperties" not in first["tools"][0]["function"]["parameters"]
+    tool_msgs = [m for m in second["messages"] if m["role"] == "tool"]
+    assert [m["tool_call_id"] for m in tool_msgs] == ["c1", "c2"] and "Wrote 2 characters" in tool_msgs[1]["content"]
+    assert [t["text"] for t in brain.memory.transcript()] == ["save a note", "Saved your note."]
+
+    asyncio.run(brain.handle("again", sink=sink))                 # broken tool arguments are sent back, not run
+    assert "INVALID_JSON" in FakeProvider.requests[3]["messages"][-1]["content"]
+
+    FakeProvider.status = 429
+    seen.clear()
+    before = len(brain.messages)
+    asyncio.run(brain.handle("one more", sink=sink))
+    assert "limit is used up" in next(e["text"] for e in seen if e["type"] == "error") and len(brain.messages) == before
+
+    FakeProvider.status, FakeProvider.replies = 200, [{"role": "assistant", "content": "Market looks small."}]
+    out = asyncio.run(brain.registry.tools["ask_helper"].handler(helper="business_analyst", task="BIM audits in Dubai"))
+    assert out == "Market looks small." and "tools" not in FakeProvider.requests[-1]
+    assert "cannot search the web" in FakeProvider.requests[-1]["messages"][0]["content"]
+
+
+def test_setup_offers_free_brains_first(tmp_path, provider, monkeypatch):
+    monkeypatch.setitem(free_brain.PROVIDERS["gemini"], "base_url", provider)
+    answers = iter(["", "Abu", "", "", "free-key", "flash-free", "", "n", "", "", "", "n"])
+    said = []
+    setup_wizard.run(tmp_path, ask=lambda _: next(answers), say=said.append)   # Enter = option 1, the free one
+    config = json.loads((tmp_path / "config.json").read_text())
+    assert config["provider"] == "free" and config["free_model"] == "flash-free" and config["free_base_url"] == provider
+    assert "LUMI_FREE_API_KEY=free-key" in (tmp_path / "secrets.env").read_text()
+    assert any("flash-free" in line and "pro-paid" in line for line in said)             # listed from the provider
+    assert not any("brain offline" in line for line in said)
+    assert free_brain.list_models(provider, "k") == ["flash-free", "pro-paid"]

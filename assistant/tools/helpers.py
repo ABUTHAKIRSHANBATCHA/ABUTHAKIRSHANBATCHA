@@ -38,9 +38,14 @@ HELPERS = {
 
 def register(reg: Registry, brain) -> None:
     async def ask_helper(helper: str, task: str) -> str:
-        if brain.client is None:
-            return "Helper agents need the Claude API key."
         spec = HELPERS[helper]
+        if brain.free:
+            # The free models have no web search here, so say so rather than invent sources.
+            note = (" You cannot search the web in this setup: answer from what you know, and say "
+                    "clearly which facts may be out of date and need checking.") if spec["web"] else ""
+            return await brain.complete_free(spec["prompt"] + note, task) or "The helper returned nothing."
+        if brain.client is None:
+            return "Helper agents need a brain. Run setup and choose a free model or add a Claude API key."
         kwargs = {}
         if spec["web"]:
             kwargs["tools"] = [{"type": "web_search_20260209", "name": "web_search", "max_uses": 6}]

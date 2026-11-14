@@ -1,6 +1,9 @@
 {
   "name": "Lumi",
   "owner": "Boss",
+  "provider": "free",
+  "free_base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+  "free_model": "",
   "model": "claude-opus-5-5",
   "effort": "medium",
   "http_port": 8765,

@@ -66,7 +66,7 @@ async def serve() -> None:
                                            ssl_certfile=cert, ssl_keyfile=key))
     brain = app.state.brain
     print(f"\n  {cfg.name} is running.")
-    print(f"  Brain:      {'online (' + cfg.model + ')' if brain.online else 'OFFLINE - set ANTHROPIC_API_KEY'}")
+    print(f"  Brain:      {'online (' + brain.brain_name + ')' if brain.online else 'OFFLINE - run setup.bat and choose a brain'}")
     print(f"  On this PC: http://127.0.0.1:{cfg.http_port}")
     for ip in ips:
         print(f"  On phone:   https://{ip}:{cfg.https_port}   (same Wi-Fi; accept the certificate warning once)")

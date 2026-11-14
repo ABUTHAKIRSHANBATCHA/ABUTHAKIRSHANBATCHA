@@ -12,6 +12,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
+from . import free_brain
 from .config import ROOT, Config
 from .voice_id import MODEL_NAME, MODEL_URL
 
@@ -34,7 +35,7 @@ def read_env(path: Path) -> dict[str, str]:
     return out
 
 
-def run(root: Path = ROOT, ask=input, say=print, install_voice=None) -> None:
+def run(root: Path = ROOT, ask=input, say=print, install_voice=None, list_models=None) -> None:
     config_file, secrets_file = root / "config.json", root / "secrets.env"
     config = json.loads(config_file.read_text(encoding="utf-8")) if config_file.exists() else {}
     secrets = read_env(secrets_file)
@@ -58,8 +59,34 @@ def run(root: Path = ROOT, ask=input, say=print, install_voice=None) -> None:
     config["owner"] = question("What should it call you", config.get("owner", defaults.owner))
     config["currency"] = question("Currency for money tracking", config.get("currency", defaults.currency))
 
-    say("\n-- Brain --\nGet a key at https://platform.claude.com (API keys).")
-    secret("Claude API key", "ANTHROPIC_API_KEY")
+    say("\n-- Brain (the AI model that thinks for the assistant) --")
+    options = list(free_brain.PROVIDERS) + ["claude"]
+    for n, key in enumerate(options, 1):
+        label = free_brain.PROVIDERS[key]["label"] if key != "claude" else "Claude (paid: you buy API credit)"
+        say(f"  {n}. {label}")
+    current = config.get("brain_choice", "gemini")
+    picked = question("Choose a number", str(options.index(current) + 1 if current in options else 1))
+    choice = options[int(picked) - 1] if picked.isdigit() and 1 <= int(picked) <= len(options) else current
+    config["brain_choice"] = choice
+    if choice == "claude":
+        config["provider"] = "claude"
+        say("Get a key at https://platform.claude.com (API keys). It needs paid credit under Billing.")
+        secret("Claude API key", "ANTHROPIC_API_KEY")
+    else:
+        spec = free_brain.PROVIDERS[choice]
+        config["provider"], config["free_base_url"] = "free", spec["base_url"]
+        say(spec["key_help"])
+        if spec["needs_key"]:
+            secret("Free API key", "LUMI_FREE_API_KEY")
+        else:
+            secrets.pop("LUMI_FREE_API_KEY", None)
+        models = (list_models or _models)(spec["base_url"], secrets.get("LUMI_FREE_API_KEY", "") if spec["needs_key"] else "")
+        if models:
+            say("Models available to you:\n  " + "\n  ".join(models[:40]))
+            say("Pick one that supports tools (function calling). 'flash' models are a good start on Gemini.")
+        else:
+            say("I could not list the models (check the key, or that Ollama is running). Type the model name.")
+        config["free_model"] = question("Model name", config.get("free_model", "") if config.get("free_model", "") in models or not models else "")
 
     say("\n-- Phone messaging (Telegram) --\nIn Telegram, message @BotFather, send /newbot, and copy the token it gives you.")
     secret("Telegram bot token", "LUMI_TELEGRAM_TOKEN")
@@ -97,9 +124,17 @@ def run(root: Path = ROOT, ask=input, say=print, install_voice=None) -> None:
     secrets_file.write_text("# Keys and passwords. Keep this file private.\n"
                             + "".join(f"{k}={v}\n" for k, v in secrets.items()), encoding="utf-8")
     say(f"\nSaved {config_file.name} and {secrets_file.name}.")
-    if not secrets.get("ANTHROPIC_API_KEY"):
-        say("No Claude API key was entered, so the assistant will start with its brain offline.")
+    ready = bool(config.get("free_model")) if config["provider"] == "free" else bool(secrets.get("ANTHROPIC_API_KEY"))
+    if not ready:
+        say("No model or key was entered, so the assistant will start with its brain offline.")
     say("Start the assistant with start.bat (or: python -m assistant).\n")
+
+
+def _models(base_url: str, key: str) -> list[str]:
+    try:
+        return free_brain.list_models(base_url, key)
+    except free_brain.FreeAPIError:
+        return []
 
 
 def _install_voice(model: Path, say) -> None:

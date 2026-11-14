@@ -15,6 +15,10 @@ WEB_DIR = Path(__file__).resolve().parent / "web"
 class Config:
     name: str = "Lumi"               # shown on the HUD; "Hey <name>" wakes it in wake-word mode
     owner: str = "Boss"              # how the assistant addresses you
+    # Which brain to use: "free" (no cost; see free_base_url / free_model) or "claude" (paid API).
+    provider: str = "claude"
+    free_base_url: str = ""          # e.g. https://generativelanguage.googleapis.com/v1beta/openai
+    free_model: str = ""             # a model name from that provider that supports tools
     model: str = "claude-opus-5-5"
     effort: str = "medium"           # low | medium | high | xhigh | max
     http_port: int = 8765            # this PC only (127.0.0.1)

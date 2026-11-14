@@ -288,7 +288,7 @@
       $("open-voice").hidden = !e.voice.available;
       document.title = e.name; $("name").textContent = e.name.toUpperCase();
       $("hands").textContent = `"HEY ${e.name.toUpperCase()}"`;
-      setLink(e.online ? "ONLINE" : "BRAIN OFFLINE - NO API KEY", !e.online);
+      setLink(e.online ? "ONLINE" : "BRAIN OFFLINE - RUN SETUP", !e.online);
       if (!store.get("lang")) setLang(e.language);
       $("pair-info").hidden = !e.pairing;
       if (e.pairing) {

@@ -31,21 +31,18 @@ It is called Lumi; the name is a setting you can change.
 | Send a file from the PC to your phone ("send me the latest clash report") | Tested against a simulated Telegram |
 | Find installed BIM software, launch it, find model files (.rvt .nwd .ifc .dwg ...) | Written for Windows; not yet run on a Windows PC |
 | Live Revit model queries (model info, element counts, warnings, levels, sheets, links) | Written; not yet run inside Revit |
-| Brain (Claude) | Needs your API key; without one it only opens things and reports status |
+| Brain: a free model (Google Gemini free tier, Groq free tier, or Ollama on your PC) or Claude (paid) | Free option tested against a simulated provider, and the Gemini address was confirmed to respond; not yet run with a real free key. Without any brain Lumi only opens things and reports status |
 
 ## Set up and start (Windows)
 
 1. Install [Python 3.10+](https://www.python.org/downloads/) and tick "Add to PATH".
 2. Double-click `setup.bat`. It installs everything and asks for:
    - the assistant's name and what it should call you
-   - your Claude API key (from <https://platform.claude.com>)
+   - which brain to use and its key (see "Choosing the brain" below; option 1 is free)
    - a Telegram bot token (optional)
    - your email address and app password (optional)
    - whether to install voice lock (downloads about 60 MB)
 3. Double-click `start.bat`. The screen opens at <http://127.0.0.1:8765>.
-
-The API key needs paid credit on the same account: at <https://platform.claude.com> open
-Billing and buy credits. A Claude.ai chat subscription (Pro or Max) does not include API credit.
 
 Run `setup.bat` again whenever you want to change an answer. Settings are saved in
 `config.json`; keys and passwords are saved in `secrets.env`, which stays on your PC.
@@ -53,6 +50,29 @@ Run `setup.bat` again whenever you want to change an answer. Settings are saved 
 Use Chrome or Edge. Tap the mic (or press Space) and talk. Press `"HEY LUMI"` to keep it
 listening: it then acts only when you start with "Hey Lumi" (or "ஹே லூமி").
 Tap the mic while it is speaking to interrupt.
+
+## Choosing the brain (free or paid)
+
+`setup.bat` offers four brains. The first three cost nothing.
+
+| Option | Cost | What you need | Good to know |
+|---|---|---|---|
+| 1. Google Gemini free tier | Free | A key from <https://aistudio.google.com/apikey> (Google account, no card) | Daily request limit. Google may use free-tier conversations to improve its models, so think before sending confidential client documents |
+| 2. Groq free tier | Free | A key from <https://console.groq.com/keys> (no card) | Fast; lower daily limits |
+| 3. Ollama on this PC | Free | Install <https://ollama.com> and download a model that supports tools | Fully private and offline, but needs a strong PC (16 GB RAM or a good graphics card) and is the weakest of the four |
+| 4. Claude | Paid per use | A key from <https://platform.claude.com> with credit bought under Billing | Best quality; a Claude.ai chat subscription does not include this credit |
+
+Setup lists the models your key can use; pick one that supports tools (function calling).
+Free providers change their model names and limits often, so if a model stops working, run
+`setup.bat` again and pick another from the list.
+
+What changes with a free brain:
+- Answers are less capable than Claude's, most noticeably on long jobs with many steps such as
+  breaking an EIR into checklist items.
+- When the free limit is reached Lumi says so; it works again after the limit resets.
+- Helper agents cannot search the web. They answer from what the model knows and say what may
+  be out of date.
+- Everything else works the same: approvals, memory, filing, dashboard, voice lock, Telegram.
 
 ## Connect your phone
 
