@@ -67,11 +67,46 @@ def get_system_status() -> str:
     })
 
 
+PREFERRED_BROWSER = "chrome"      # set from config in register()
+
+
+def chrome_path() -> str:
+    """Where Google Chrome is installed, or "" when it is not."""
+    if IS_WINDOWS:
+        import winreg
+        for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+            try:
+                key = winreg.OpenKey(hive, r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe")
+                exe = str(winreg.QueryValueEx(key, None)[0])
+                if Path(exe).exists():
+                    return exe
+            except OSError:
+                continue
+        for base in (os.environ.get("PROGRAMFILES", ""), os.environ.get("PROGRAMFILES(X86)", ""),
+                     os.environ.get("LOCALAPPDATA", "")):
+            exe = Path(base) / "Google/Chrome/Application/chrome.exe"
+            if base and exe.exists():
+                return str(exe)
+        return ""
+    if sys.platform == "darwin":
+        exe = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        return exe if Path(exe).exists() else ""
+    return shutil.which("google-chrome") or shutil.which("google-chrome-stable") or ""
+
+
+def open_url(url: str) -> str:
+    chrome = chrome_path() if PREFERRED_BROWSER == "chrome" else ""
+    if chrome:
+        subprocess.Popen([chrome, url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return f"Opened {url} in Chrome."
+    webbrowser.open(url)
+    return f"Opened {url} in the default browser" + (" (Chrome is not installed)." if PREFERRED_BROWSER == "chrome" else ".")
+
+
 def open_target(target: str) -> str:
     """Open a URL, file, folder or application by name."""
     if target.lower().startswith(("http://", "https://")):
-        webbrowser.open(target)
-        return f"Opened {target} in the browser."
+        return open_url(target)
     path = _path(target)
     if path.exists():
         if IS_WINDOWS:
@@ -175,6 +210,8 @@ def run_command(command: str, working_directory: str = "") -> str:
 
 
 def register(reg: Registry, cfg, hub) -> None:
+    global PREFERRED_BROWSER
+    PREFERRED_BROWSER = cfg.browser
     async def show_on_devices(title: str, text: str = "", url: str = "") -> str:
         await hub.broadcast({"type": "card", "title": title, "text": text, "url": url})
         return f"Shown on {hub.device_count()} connected device(s)."
@@ -201,7 +238,7 @@ def register(reg: Registry, cfg, hub) -> None:
         {}, [], get_system_status))
     reg.add(Tool(
         "open_target",
-        "Open a website (full https:// URL), a file or folder (path), or start an "
+        "Open a website (full https:// URL; it opens in Google Chrome), a file or folder (path), or start an "
         "application by name (e.g. 'excel', 'chrome', 'notepad'). For Autodesk and other "
         "BIM programs use launch_bim_app instead.",
         {"target": {"type": "string", "description": "URL, path or application name"}},

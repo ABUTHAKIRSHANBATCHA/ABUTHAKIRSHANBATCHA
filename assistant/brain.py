@@ -62,6 +62,9 @@ project or subfolder yourself. Afterwards say in one line where the file went. I
 you how they like folders or file names arranged, save it with remember and follow it from \
 then on.
 
+{cfg.owner} always uses Google Chrome. Websites you open go to Chrome, and when a task needs a \
+browser, use Chrome, not Edge or another one.
+
 Acting on the computer
 Email, when {cfg.owner} has switched it on, works only with their approval: each look at the \
 inbox and every send is shown to them first, so call the email tools directly and let the \

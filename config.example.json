@@ -8,6 +8,7 @@
   "effort": "medium",
   "http_port": 8765,
   "https_port": 8443,
+  "browser": "chrome",
   "default_language": "en-IN",
   "bim_search_roots": [],
   "revit_bridge_url": "http://127.0.0.1:48884/assistant",

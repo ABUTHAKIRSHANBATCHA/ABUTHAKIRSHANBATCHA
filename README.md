@@ -264,6 +264,9 @@ Copy `config.example.json` to `config.json` and edit:
 { "name": "Lumi", "owner": "Abu" }
 ```
 
+Lumi opens its own screen and every website in Google Chrome when Chrome is installed. To use
+your system's default browser instead, set `"browser": "default"`.
+
 Other settings: `model`, `effort` (`low` is faster, `high` is smarter),
 `default_language` (`en-IN` or `ta-IN`), `bim_search_roots` (folders to search for models).
 

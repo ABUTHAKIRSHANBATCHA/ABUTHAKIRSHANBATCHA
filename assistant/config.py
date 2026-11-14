@@ -23,6 +23,7 @@ class Config:
     effort: str = "medium"           # low | medium | high | xhigh | max
     http_port: int = 8765            # this PC only (127.0.0.1)
     https_port: int = 8443           # phone / other devices on your Wi-Fi
+    browser: str = "chrome"          # web pages open in Chrome when it is installed; "default" = system browser
     default_language: str = "en-IN"  # en-IN or ta-IN
     bim_search_roots: list[str] = field(default_factory=list)
     revit_bridge_url: str = "http://127.0.0.1:48884/assistant"

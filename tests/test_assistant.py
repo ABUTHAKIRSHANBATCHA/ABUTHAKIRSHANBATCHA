@@ -389,3 +389,21 @@ def test_no_credit_error_is_explained_plainly(app):
     assert errors == ["My Claude API account has no credit left. Add credit at platform.claude.com "
                       "under Billing, then talk to me again."]
     assert brain.messages == []
+
+
+def test_websites_open_in_chrome_when_installed(app, monkeypatch):
+    from assistant.tools import system
+    launched, fallback = [], []
+    monkeypatch.setattr(system.subprocess, "Popen", lambda argv, **kw: launched.append(argv))
+    monkeypatch.setattr(system.webbrowser, "open", lambda url: fallback.append(url))
+    monkeypatch.setattr(system, "chrome_path", lambda: "C:/Chrome/chrome.exe")
+    assert system.PREFERRED_BROWSER == "chrome"                         # the default setting
+    assert system.open_target("https://example.com") == "Opened https://example.com in Chrome."
+    assert launched == [["C:/Chrome/chrome.exe", "https://example.com"]] and fallback == []
+    monkeypatch.setattr(system, "chrome_path", lambda: "")
+    assert "default browser (Chrome is not installed)" in system.open_target("https://example.com")
+    assert fallback == ["https://example.com"]
+    monkeypatch.setattr(system, "PREFERRED_BROWSER", "default")
+    monkeypatch.setattr(system, "chrome_path", lambda: "C:/Chrome/chrome.exe")
+    assert system.open_target("https://example.org").endswith("default browser.") and len(launched) == 1
+    assert "Google Chrome" in system_prompt(Config())

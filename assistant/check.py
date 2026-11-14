@@ -112,6 +112,10 @@ def run(root: Path = ROOT, say=print) -> list[tuple[str, str, str]]:
     else:
         add(OFF, "Voice lock", "not installed (choose it in setup.bat to accept only your voice)")
 
+    from .tools.system import chrome_path
+    chrome = chrome_path()
+    add(OK if chrome else WARN, "Google Chrome", chrome or "not found - Lumi's voice needs Chrome (or Edge); pages will open in the default browser")
+
     # Folders
     if cfg.projects_root:
         p = Path(os.path.expandvars(cfg.projects_root)).expanduser()
