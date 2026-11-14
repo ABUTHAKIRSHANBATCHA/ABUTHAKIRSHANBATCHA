@@ -16,6 +16,7 @@ The name is a setting, so you can choose it later.
 | Phone connection over Wi-Fi with one-time PIN pairing | Working |
 | Permanent memory: every conversation is stored on your PC and searchable; notes on you, your projects and your ideas carry into every new conversation | Working (the assistant deciding what to save needs the Claude brain) |
 | BIM project checklists from client requirements review and pre-appointment BEP to handover (ISO 19650), plus the client's own requirements read from PDF / Word documents | Working (reading and breaking down an EIR needs the Claude brain) |
+| Tracking dashboard: project progress by stage, requests per day, most used actions, saved ideas (right side on PC; MENU > TRACKING DASHBOARD on phone) | Working |
 | Find installed BIM software, launch it, find model files (.rvt .nwd .ifc .dwg ...) | Written for Windows; not yet run on a Windows PC |
 | Live Revit model queries (model info, element counts, warnings, levels, sheets, links) | Written; not yet run inside Revit |
 | Brain (Claude) | Needs your API key; without one it only opens things and reports status |

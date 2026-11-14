@@ -230,6 +230,7 @@ class Brain:
         except Exception as e:
             await self.hub.broadcast({**event, "status": "error"})
             return result(f"{type(e).__name__}: {e}", True)
+        self.memory.log_tool(block.name)
         await self.hub.broadcast({**event, "status": "done"})
         return result(output or "(no output)")
 

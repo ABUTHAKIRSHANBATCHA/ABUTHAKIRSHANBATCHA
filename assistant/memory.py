@@ -48,6 +48,40 @@ class Memory:
                 continue
         return out
 
+    # --------------------------------------------------------------- tracking
+
+    def log_tool(self, name: str) -> None:
+        with (self.folder / "activity.jsonl").open("a", encoding="utf-8") as f:
+            f.write(json.dumps({"at": _now(), "tool": name}) + "\n")
+
+    def tracking(self, days: int = 14, today: dt.date | None = None) -> dict:
+        """Usage figures for the dashboard: requests per day, most used actions, saved ideas."""
+        today = today or dt.date.today()
+        window = [(today - dt.timedelta(days=n)).isoformat() for n in range(days - 1, -1, -1)]
+        per_day = dict.fromkeys(window, 0)
+        for t in self.transcript():
+            if t["role"] == "user" and t["at"][:10] in per_day:
+                per_day[t["at"][:10]] += 1
+        tools: dict[str, int] = {}
+        path = self.folder / "activity.jsonl"
+        if path.exists():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                try:
+                    entry = json.loads(line)
+                except ValueError:
+                    continue
+                if entry["at"][:10] in per_day:
+                    tools[entry["tool"]] = tools.get(entry["tool"], 0) + 1
+        ideas = [n for n in self.notes if n["category"] in ("idea", "business")]
+        ideas.sort(key=lambda n: n["updated"], reverse=True)
+        return {
+            "requests": [{"day": d, "count": c} for d, c in per_day.items()],
+            "tools": [{"name": k, "count": v} for k, v in sorted(tools.items(), key=lambda kv: -kv[1])[:5]],
+            "ideas": [{"title": n["title"], "updated": n["updated"][:10]} for n in ideas[:5]],
+            "idea_count": len(ideas),
+            "note_count": len(self.notes),
+        }
+
     # ------------------------------------------------------------------ notes
 
     def _save(self) -> None:

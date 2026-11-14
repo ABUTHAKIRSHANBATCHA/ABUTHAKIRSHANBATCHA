@@ -15,7 +15,7 @@ html, body { height: 100%; }
 body {
   background: radial-gradient(ellipse at 50% 45%, #06202f 0%, var(--bg) 62%);
   color: var(--text); font-family: var(--font); overflow: hidden;
-  display: grid; grid-template: "head head head" auto "left main right" 1fr "foot foot foot" auto / 150px 1fr 280px;
+  display: grid; grid-template: "head head head" auto "left main right" 1fr "foot foot foot" auto / 150px 1fr 300px;
   padding: max(14px, env(safe-area-inset-top)) 16px max(14px, env(safe-area-inset-bottom));
   gap: 10px; -webkit-tap-highlight-color: transparent;
 }
@@ -43,8 +43,42 @@ small { display: block; font-size: .68rem; letter-spacing: .3em; color: var(--ho
 .gauge b { font-family: var(--mono); font-size: 1rem; font-weight: 500; margin-top: -8px; }
 .gauge span { position: absolute; bottom: 20px; font-size: .58rem; letter-spacing: .22em; color: var(--holo-dim); }
 
-#activity { grid-area: right; align-self: center; max-height: 62vh; overflow: hidden;
-  border-left: 1px solid var(--holo-faint); padding-left: 14px; }
+#activity { grid-area: right; min-height: 0; overflow-y: auto; scrollbar-width: thin;
+  scrollbar-color: var(--holo-faint) transparent; border-left: 1px solid var(--holo-faint);
+  padding: 4px 6px 4px 14px; display: flex; flex-direction: column; gap: 20px; }
+.empty { font-size: .8rem; color: rgba(217, 248, 255, .45); list-style: none; }
+.project { margin-bottom: 12px; }
+.project header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  font-size: .86rem; margin-bottom: 5px; }
+.project header span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project header b { font-family: var(--mono); font-weight: 500; }
+.stages { display: flex; gap: 2px; }
+.stages i { flex: 1; height: 10px; background: var(--holo-faint); border-radius: 2px; overflow: hidden; }
+.stages i u { display: block; height: 100%; background: var(--holo); border-radius: 2px; }
+.stages i:hover, .bars i:hover u, .tool:hover u { filter: brightness(1.5); }
+.hero { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+.hero b { font-family: var(--mono); font-size: 1.7rem; font-weight: 500; line-height: 1; }
+.hero span { font-size: .78rem; color: rgba(217, 248, 255, .6); }
+.bars { display: flex; align-items: flex-end; gap: 2px; height: 56px;
+  border-bottom: 1px solid var(--holo-faint); }
+.bars i { flex: 1; height: 100%; display: flex; align-items: flex-end; }
+.bars i u { display: block; width: 100%; background: var(--holo); border-radius: 3px 3px 0 0; min-height: 0; }
+.axis { display: flex; justify-content: space-between; font-size: .66rem; margin-top: 3px;
+  color: rgba(217, 248, 255, .5); font-family: var(--mono); }
+.tool { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; font-size: .78rem; margin-bottom: 7px; }
+.tool b { font-family: var(--mono); font-weight: 500; }
+.tool div { grid-column: 1 / -1; height: 5px; background: var(--holo-faint); border-radius: 3px; }
+.tool u { display: block; height: 100%; background: var(--holo); border-radius: 3px; }
+#ideas { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+#ideas li:not(.empty) { font-size: .84rem; display: flex; justify-content: space-between; gap: 8px; }
+#ideas small { margin: 0; letter-spacing: 0; font-family: var(--mono); white-space: nowrap;
+  color: rgba(217, 248, 255, .5); }
+#idea-count { font-family: var(--mono); letter-spacing: 0; color: var(--text); }
+#tip { position: fixed; z-index: 6; pointer-events: none; background: rgba(3, 16, 26, .96);
+  border: 1px solid var(--holo); border-radius: 4px; padding: 5px 9px; font-size: .78rem;
+  max-width: 240px; box-shadow: 0 0 18px rgba(79, 227, 255, .25); }
+#tip[hidden] { display: none; }
+#open-data, #close-data { display: none; }
 h2 { font-size: .72rem; letter-spacing: .34em; color: var(--holo-dim); font-weight: 500; margin-bottom: 10px; }
 h3 { font-size: .68rem; letter-spacing: .26em; color: var(--holo-dim); font-weight: 500; margin-bottom: 6px; }
 #log { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -127,6 +161,10 @@ pre { font-family: var(--mono); font-size: .82rem; background: rgba(0, 0, 0, .45
   .gauge b { font-size: .8rem; margin-top: -6px; }
   .gauge span { bottom: 13px; font-size: .5rem; }
   #activity { display: none; }
+  body.show-data #activity { display: flex; position: fixed; inset: 0; z-index: 5; border: 0;
+    background: rgba(2, 9, 15, .97); padding: max(18px, env(safe-area-inset-top)) 18px 24px; }
+  body.show-data #close-data { display: block; align-self: flex-end; }
+  #open-data { display: block; }
   .brand span { font-size: 1.15rem; letter-spacing: .32em; }
   #reply { font-size: 1.08rem; max-height: 24vh; }
   .controls { gap: 10px; }

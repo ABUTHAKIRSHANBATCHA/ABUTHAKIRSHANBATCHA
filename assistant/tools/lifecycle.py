@@ -131,6 +131,14 @@ class Projects:
         return {"done": done, "total": len(counted),
                 "percent": round(100 * done / len(counted)) if counted else 100}
 
+    def summary(self) -> list[dict]:
+        """Progress of every project and stage, for the dashboard."""
+        return [{"name": p["name"], "client": p["client"], **self._progress(p["items"]),
+                 "stages": [{"stage": n, "title": title,
+                             **self._progress([i for i in p["items"] if i["stage"] == n])}
+                            for n, title in STAGES.items()]}
+                for p in self._all()]
+
     # ------------------------------------------------------------------ tools
 
     def create(self, name: str, client: str = "", description: str = "") -> str:

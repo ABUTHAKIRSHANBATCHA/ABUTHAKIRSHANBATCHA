@@ -39,6 +39,7 @@ def paired_socket(client, app):
     with client.websocket_connect("/ws") as ws:
         ws.send_json({"type": "auth", "token": token})
         assert ws.receive_json()["type"] == "hello"
+        assert ws.receive_json()["type"] == "dashboard"
         yield ws
 
 
@@ -299,3 +300,45 @@ def test_toolset_launch_matching(tmp_path):
         "My Pipeline Tool": True, "Missing Tool": False}
     assert bim.pick_install(bim.installed_software(cfg), "pipeline")["executable"] == str(exe)
     assert "Unreal Engine" in system_prompt(cfg) and "Civil 3D" in system_prompt(cfg)
+
+
+def test_tracking_figures(tmp_path):
+    import datetime as dt
+    m = Memory(tmp_path)
+    today = dt.date(2026, 11, 14)
+    lines = [{"at": "2026-11-14 09:00", "role": "user", "text": "a"},
+             {"at": "2026-11-14 09:01", "role": "assistant", "text": "b"},
+             {"at": "2026-11-12 10:00", "role": "user", "text": "c"},
+             {"at": "2026-10-01 10:00", "role": "user", "text": "too old"}]
+    m.transcript_file.write_text("\n".join(json.dumps(l) for l in lines) + "\n")
+    (tmp_path / "activity.jsonl").write_text(
+        "\n".join(json.dumps({"at": at, "tool": t}) for at, t in [
+            ("2026-11-14 09:00", "revit_query"), ("2026-11-13 09:00", "revit_query"),
+            ("2026-11-13 09:05", "open_target"), ("2026-09-01 09:00", "run_command")]) + "\n")
+    m.remember("idea", "Clash app", "x")
+    m.remember("profile", "Role", "BIM manager")
+    t = m.tracking(today=today)
+    assert len(t["requests"]) == 14 and t["requests"][-1] == {"day": "2026-11-14", "count": 1}
+    assert sum(r["count"] for r in t["requests"]) == 2            # assistant turns and old days excluded
+    assert t["tools"] == [{"name": "revit_query", "count": 2}, {"name": "open_target", "count": 1}]
+    assert t["idea_count"] == 1 and t["ideas"][0]["title"] == "Clash app" and t["note_count"] == 2
+
+
+def test_dashboard_is_sent_on_connect_and_after_each_reply(app, tmp_path):
+    brain = app.state.brain
+    FakeStreamBrain(brain, [
+        message(tool_use("t1", "bim_project_create", {"name": "Marina Tower"})),
+        message(TEXT, stop="end_turn"),
+    ])
+    with TestClient(app) as client:
+        token = client.post("/api/pair", json={"pin": app.state.devices.pin}).json()["token"]
+        with client.websocket_connect("/ws") as ws:
+            ws.send_json({"type": "auth", "token": token})
+            assert ws.receive_json()["type"] == "hello"
+            first = ws.receive_json()
+            assert first["type"] == "dashboard" and first["projects"] == []
+            ws.send_json({"type": "say", "text": "start Marina Tower"})
+            after = drain(ws, "dashboard")[-1]
+    assert after["projects"][0]["name"] == "Marina Tower" and len(after["projects"][0]["stages"]) == 7
+    assert after["tools"] == [{"name": "bim_project_create", "count": 1}]
+    assert after["requests"][-1]["count"] == 1

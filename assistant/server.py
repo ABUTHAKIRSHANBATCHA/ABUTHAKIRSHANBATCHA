@@ -19,6 +19,7 @@ from .brain import Brain
 from .config import DATA_DIR, WEB_DIR, Config
 from .memory import Memory
 from .tools import build_registry
+from .tools.lifecycle import Projects
 from .tools.system import system_stats
 
 LOOPBACK = {"127.0.0.1", "::1"}
@@ -115,7 +116,15 @@ def create_app(cfg: Config, devices: Devices | None = None) -> FastAPI:
     hub = Hub()
     devices = devices or Devices()
     memory = Memory(cfg.data_path / "memory")
-    brain = Brain(cfg, build_registry(cfg, hub, memory), hub, memory)
+    projects = Projects(cfg.data_path / "projects")
+    brain = Brain(cfg, build_registry(cfg, hub, memory, projects), hub, memory)
+
+    def dashboard() -> dict:
+        return {"type": "dashboard", "projects": projects.summary(), **memory.tracking()}
+
+    async def answer(text: str) -> None:
+        await brain.handle(text)
+        await hub.broadcast(dashboard())      # figures may have changed during the turn
 
     async def stats_loop() -> None:
         while True:
@@ -175,6 +184,7 @@ def create_app(cfg: Config, devices: Devices | None = None) -> FastAPI:
                     await ws.close(code=4401)
                     return
             await ws.send_json(hello(local))
+            await ws.send_json(dashboard())
             hub.sockets.add(ws)
             for _, request in hub.pending.values():  # show approvals already waiting
                 await ws.send_json({"type": "confirm_request", **request})
@@ -184,7 +194,7 @@ def create_app(cfg: Config, devices: Devices | None = None) -> FastAPI:
                 if kind == "say":
                     text = str(msg.get("text", "")).strip()[:4000]
                     if text:
-                        asyncio.create_task(brain.handle(text))
+                        asyncio.create_task(answer(text))
                 elif kind == "confirm":
                     hub.resolve(str(msg.get("id", "")), bool(msg.get("approve")))
                 elif kind == "reset":

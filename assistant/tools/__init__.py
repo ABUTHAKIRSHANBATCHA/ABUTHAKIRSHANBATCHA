@@ -82,12 +82,12 @@ class Registry:
         return result if isinstance(result, str) else str(result)
 
 
-def build_registry(cfg, hub, memory) -> Registry:
+def build_registry(cfg, hub, memory, projects) -> Registry:
     from . import bim, lifecycle, notes, system
 
     reg = Registry()
     system.register(reg, cfg, hub)
     bim.register(reg, cfg)
-    lifecycle.register(reg, lifecycle.Projects(cfg.data_path / "projects"))
+    lifecycle.register(reg, projects)
     notes.register(reg, memory)
     return reg

@@ -25,10 +25,32 @@
   <div class="gauge" data-key="battery"><svg viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="16"/><circle class="value" cx="20" cy="20" r="16"/></svg><b>--</b><span>BATT</span></div>
 </aside>
 
-<aside id="activity" aria-label="Activity">
-  <h2>ACTIVITY</h2>
-  <ul id="log"></ul>
+<aside id="activity" aria-label="Tracking">
+  <button id="close-data" class="ghost" hidden>CLOSE</button>
+  <section>
+    <h2>PROJECTS</h2>
+    <div id="projects"><p class="empty">No projects yet. Say "start a project called ...".</p></div>
+  </section>
+  <section>
+    <h2>REQUESTS, LAST 14 DAYS</h2>
+    <div class="hero"><b id="req-total">0</b><span id="req-note">requests</span></div>
+    <div id="req-chart" class="bars" role="img" aria-label="Requests per day"></div>
+    <div class="axis"><span id="req-from"></span><span>today</span></div>
+  </section>
+  <section>
+    <h2>MOST USED ACTIONS</h2>
+    <div id="tools"><p class="empty">Nothing yet.</p></div>
+  </section>
+  <section>
+    <h2>IDEAS <span id="idea-count"></span></h2>
+    <ul id="ideas"><li class="empty">Tell me an idea and I will keep it.</li></ul>
+  </section>
+  <section>
+    <h2>LIVE ACTIVITY</h2>
+    <ul id="log"></ul>
+  </section>
 </aside>
+<div id="tip" role="tooltip" hidden></div>
 
 <main>
   <p id="state-label">STANDBY</p>
@@ -59,6 +81,7 @@
     <p id="pair-urls" class="mono"></p>
     <p>Pairing PIN <b id="pair-pin" class="mono"></b></p>
   </section>
+  <button id="open-data" class="ghost wide">TRACKING DASHBOARD</button>
   <button id="reset" class="ghost wide">START A NEW CONVERSATION</button>
   <button id="mute" class="ghost wide">VOICE REPLIES: ON</button>
   <button id="close-menu" class="wide">CLOSE</button>

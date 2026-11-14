@@ -57,7 +57,7 @@
       li = document.createElement("li"); li.dataset.id = e.id;
       li.append(document.createElement("b"), document.createElement("span"));
       $("log").prepend(li);
-      while ($("log").children.length > 9) $("log").lastChild.remove();
+      while ($("log").children.length > 5) $("log").lastChild.remove();
     }
     li.className = e.status;
     li.querySelector("b").textContent = e.name.replaceAll("_", " ").toUpperCase() +
@@ -76,6 +76,60 @@
     x.onclick = () => el.remove(); el.append(x);
     $("cards").prepend(el);
     while ($("cards").children.length > 3) $("cards").lastChild.remove();
+  }
+
+  // -------------------------------------------------------------- dashboard
+
+  function el(tag, props, ...kids) {
+    const node = Object.assign(document.createElement(tag), props || {});
+    node.append(...kids); return node;
+  }
+  function tipOn(node, text) {          // hover / tap detail for a chart mark
+    node.dataset.tip = text; node.tabIndex = 0;
+    return node;
+  }
+  function showTip(ev) {
+    const target = ev.target.closest("[data-tip]");
+    if (!target) return;
+    const tip = $("tip"); tip.textContent = target.dataset.tip; tip.hidden = false;
+    const r = target.getBoundingClientRect();
+    const left = Math.min(Math.max(8, r.left + r.width / 2 - tip.offsetWidth / 2), innerWidth - tip.offsetWidth - 8);
+    tip.style.left = `${left}px`; tip.style.top = `${Math.max(8, r.top - tip.offsetHeight - 8)}px`;
+  }
+  function hideTip() { $("tip").hidden = true; }
+  const prettyDay = (iso) => new Date(iso + "T00:00").toLocaleDateString([], { day: "numeric", month: "short" });
+  const prettyTool = (name) => name.replaceAll("_", " ");
+
+  function drawDashboard(d) {
+    const projects = d.projects.map((p) => el("div", { className: "project" },
+      el("header", null, el("span", { textContent: p.name }), el("b", { textContent: `${p.percent}%` })),
+      el("div", { className: "stages" }, ...p.stages.map((s) => {
+        const fill = el("u"); fill.style.width = `${s.percent}%`;
+        return tipOn(el("i", null, fill), `Stage ${s.stage}: ${s.title} - ${s.done} of ${s.total} done`);
+      }))));
+    if (projects.length) $("projects").replaceChildren(...projects);
+
+    const total = d.requests.reduce((sum, r) => sum + r.count, 0);
+    const peak = Math.max(1, ...d.requests.map((r) => r.count));
+    $("req-total").textContent = total;
+    $("req-note").textContent = total === 1 ? "request" : "requests";
+    $("req-from").textContent = prettyDay(d.requests[0].day);
+    $("req-chart").replaceChildren(...d.requests.map((r) => {
+      const bar = el("u"); bar.style.height = `${(r.count / peak) * 100}%`;
+      return tipOn(el("i", null, bar), `${prettyDay(r.day)}: ${r.count} request${r.count === 1 ? "" : "s"}`);
+    }));
+
+    if (d.tools.length) {
+      const most = d.tools[0].count;
+      $("tools").replaceChildren(...d.tools.map((t) => {
+        const fill = el("u"); fill.style.width = `${(t.count / most) * 100}%`;
+        return tipOn(el("div", { className: "tool" }, el("span", { textContent: prettyTool(t.name) }),
+          el("b", { textContent: t.count }), el("div", null, fill)), `${prettyTool(t.name)}: used ${t.count} times in 14 days`);
+      }));
+    }
+    $("idea-count").textContent = d.idea_count || "";
+    if (d.ideas.length) $("ideas").replaceChildren(...d.ideas.map((n) =>
+      el("li", null, el("span", { textContent: n.title }), el("small", { textContent: prettyDay(n.updated) }))));
   }
 
   // ------------------------------------------------------------------ voice
@@ -189,6 +243,7 @@
     error(e) { replyText = e.text; showReply(e.text, true); speak(e.text); },
     reply_done() { busy = false; speak(speakBuffer); speakBuffer = ""; settle(); },
     tool: logTool,
+    dashboard: drawDashboard,
     card,
     stats(e) {
       gauge("cpu", e.cpu, e.cpu > 85); gauge("memory", e.memory, e.memory > 88);
@@ -249,6 +304,12 @@
     $("menu").showModal();
   };
   $("close-menu").onclick = () => $("menu").close();
+  $("open-data").onclick = () => { $("menu").close(); document.body.classList.add("show-data"); $("close-data").hidden = false; };
+  $("close-data").onclick = () => { document.body.classList.remove("show-data"); $("close-data").hidden = true; };
+  $("activity").addEventListener("pointerover", showTip);
+  $("activity").addEventListener("focusin", showTip);
+  $("activity").addEventListener("pointerout", hideTip);
+  $("activity").addEventListener("focusout", hideTip);
   $("reset").onclick = () => { ws.send(JSON.stringify({ type: "reset" })); hush(); $("menu").close(); };
   function showMute() { $("mute").textContent = `VOICE REPLIES: ${muted ? "OFF" : "ON"}`; }
   $("mute").onclick = () => { muted = !muted; store.set("muted", muted ? "1" : "0"); if (muted) hush(); showMute(); };
