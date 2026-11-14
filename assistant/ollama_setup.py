@@ -20,16 +20,28 @@ from . import free_brain
 from .config import ROOT
 
 BASE_URL = free_brain.PROVIDERS["ollama"]["base_url"]
-# Models that support tools, best first, by how much memory the PC has.
-CANDIDATES = [
-    (24, ["gpt-oss:20b", "qwen3:8b", "llama3.1:8b"]),
-    (0, ["qwen3:8b", "llama3.1:8b"]),
-]
+# Models that support tools, best first.
+LARGE = ["gpt-oss:20b", "qwen3:8b", "llama3.1:8b"]      # about 14 GB: needs a 12 GB+ graphics card to be quick
+SMALL = ["qwen3:8b", "llama3.1:8b"]                     # about 5 GB: fits a 6-8 GB graphics card
 TOOL_TEST = [{"type": "function", "function": {"name": "get_time", "description": "Current time"}}]
 
 
-def candidates_for(ram_gb: float) -> list[str]:
-    return next(models for minimum, models in CANDIDATES if ram_gb >= minimum)
+def gpu_gb() -> float | None:
+    """Memory of the NVIDIA graphics card in GB, or None when it cannot be read."""
+    try:
+        out = subprocess.run(["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+                             capture_output=True, text=True, timeout=15).stdout
+        return max(float(line) for line in out.split()) / 1024
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+
+
+def candidates_for(ram_gb: float, vram_gb: float | None = None) -> list[str]:
+    """A model that fits on the graphics card answers in seconds; one that spills into normal
+    memory takes far longer. So the graphics card decides when we can see it."""
+    if vram_gb is not None:
+        return LARGE if vram_gb >= 12 else SMALL
+    return LARGE if ram_gb >= 24 else SMALL
 
 
 def find_ollama() -> str:
@@ -71,9 +83,11 @@ def save_choice(root: Path, model: str) -> None:
 
 
 def run(root: Path = ROOT, wanted: str = "", say=print, sh=subprocess.run, ram_gb: float | None = None,
-        find=find_ollama, up=server_up, works=model_works, wait=time.sleep) -> bool:
+        vram_gb: float | None = -1, find=find_ollama, up=server_up, works=model_works, wait=time.sleep) -> bool:
     ram_gb = ram_gb if ram_gb is not None else psutil.virtual_memory().total / 1e9
-    say(f"\n=== Ollama setup ===\nThis PC has {ram_gb:.0f} GB of memory.")
+    vram_gb = gpu_gb() if vram_gb == -1 else vram_gb
+    say(f"\n=== Ollama setup ===\nThis PC has {ram_gb:.0f} GB of memory"
+        + (f" and a {vram_gb:.0f} GB graphics card." if vram_gb else "; no NVIDIA graphics card was detected."))
     if ram_gb < 7.5:
         say("That is less than the 8 GB a useful local model needs. It will be very slow or fail; "
             "the free Gemini brain (setup.bat, option 1) is the better choice on this PC.")
@@ -103,7 +117,7 @@ def run(root: Path = ROOT, wanted: str = "", say=print, sh=subprocess.run, ram_g
             say("Ollama did not start. Open the Ollama app from the Start menu, then run this again.")
             return False
 
-    for model in ([wanted] if wanted else candidates_for(ram_gb)):
+    for model in ([wanted] if wanted else candidates_for(ram_gb, vram_gb)):
         say(f"\nDownloading the model {model} (several GB; this can take a while) ...")
         if sh([exe, "pull", model]).returncode != 0:
             say(f"{model} could not be downloaded.")

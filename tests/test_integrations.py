@@ -742,6 +742,8 @@ def test_free_tool_format_and_bom_files(tmp_path):
 def test_ollama_setup_picks_tests_and_saves_a_model(tmp_path):
     from assistant import ollama_setup as o
     assert o.candidates_for(8)[0] == "qwen3:8b" and o.candidates_for(32)[0] == "gpt-oss:20b"
+    assert o.candidates_for(32, vram_gb=6)[0] == "qwen3:8b"            # a 6 GB card: the model that fits on it
+    assert o.candidates_for(16, vram_gb=16)[0] == "gpt-oss:20b"
     (tmp_path / "config.json").write_text(json.dumps({"name": "Lumi", "provider": "claude"}))
     said, ran = [], []
 
@@ -749,7 +751,7 @@ def test_ollama_setup_picks_tests_and_saves_a_model(tmp_path):
         ran.append(argv)
         return NS(returncode=1 if argv[-1] == "qwen3:8b" else 0)       # the first model fails to download
 
-    common = dict(say=said.append, sh=sh, find=lambda: "ollama", up=lambda: True, wait=lambda s: None)
+    common = dict(say=said.append, sh=sh, vram_gb=None, find=lambda: "ollama", up=lambda: True, wait=lambda s: None)
     assert o.run(tmp_path, ram_gb=16, works=lambda m: (True, ""), **common) is True
     assert [a[-1] for a in ran] == ["qwen3:8b", "llama3.1:8b"]         # fell back to the next model
     config = json.loads((tmp_path / "config.json").read_text())
