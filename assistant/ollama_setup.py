@@ -44,6 +44,38 @@ def candidates_for(ram_gb: float, vram_gb: float | None = None) -> list[str]:
     return LARGE if ram_gb >= 24 else SMALL
 
 
+INSTALLER_URL = "https://github.com/ollama/ollama/releases/latest/download/OllamaSetup.exe"
+
+
+def download_installer(url: str, say) -> Path | None:
+    """Download the official Ollama installer to the temp folder, showing progress."""
+    import tempfile
+    import urllib.request
+
+    target = Path(tempfile.gettempdir()) / "OllamaSetup.exe"
+    try:
+        with urllib.request.urlopen(url, timeout=60) as response, open(target, "wb") as out:
+            total = int(response.headers.get("Content-Length") or 0)
+            done, shown = 0, -1
+            while True:
+                chunk = response.read(4 * 1024 * 1024)
+                if not chunk:
+                    break
+                out.write(chunk)
+                done += len(chunk)
+                tenth = int(done * 10 / total) if total else -1
+                if tenth != shown and total:
+                    shown = tenth
+                    say(f"  {done / 1e9:.2f} of {total / 1e9:.2f} GB")
+        if total and done != total:
+            say("The download was cut off before it finished.")
+            return None
+        return target
+    except OSError as e:
+        say(f"The download failed: {e}")
+        return None
+
+
 def find_ollama() -> str:
     exe = shutil.which("ollama")
     if exe:
@@ -90,7 +122,7 @@ def save_choice(root: Path, model: str) -> None:
 
 
 def run(root: Path = ROOT, wanted: str = "", say=print, sh=subprocess.run, ram_gb: float | None = None,
-        vram_gb: float | None = -1, find=find_ollama, up=server_up, works=model_works, wait=time.sleep) -> bool:
+        vram_gb: float | None = -1, download=download_installer, find=find_ollama, up=server_up, works=model_works, wait=time.sleep) -> bool:
     ram_gb = ram_gb if ram_gb is not None else psutil.virtual_memory().total / 1e9
     vram_gb = gpu_gb() if vram_gb == -1 else vram_gb
     say(f"\n=== Ollama setup ===\nThis PC has {ram_gb:.0f} GB of memory"
@@ -104,10 +136,26 @@ def run(root: Path = ROOT, wanted: str = "", say=print, sh=subprocess.run, ram_g
         if platform.system() != "Windows":
             say("Ollama is not installed. Install it from https://ollama.com and run this again.")
             return False
-        say("Installing Ollama (this downloads about 1 GB) ...")
-        sh(["winget", "install", "-e", "--id", "Ollama.Ollama",
-            "--accept-package-agreements", "--accept-source-agreements"])
+        say("Installing Ollama (this downloads about 2 GB) ...")
+        try:
+            sh(["winget", "install", "-e", "--id", "Ollama.Ollama",
+                "--accept-package-agreements", "--accept-source-agreements"])
+        except OSError:
+            pass                                   # winget itself is missing on this PC
         exe = find()
+        if not exe:
+            # Windows' installer refuses when its recorded checksum is out of date ("Installer hash
+            # does not match"). Fetch the same installer from Ollama's official release page instead.
+            say("\nWindows' installer could not install it. Downloading Ollama from its official page instead ...")
+            installer = download(INSTALLER_URL, say)
+            if installer:
+                say("Running the Ollama installer ...")
+                sh([str(installer), "/SILENT"])
+                for _ in range(60):                # the installer finishes in the background
+                    exe = find()
+                    if exe:
+                        break
+                    wait(2)
         if not exe:
             say("Ollama could not be installed automatically. Download it from https://ollama.com/download, "
                 "install it, then run this again.")

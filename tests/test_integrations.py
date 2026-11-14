@@ -959,3 +959,29 @@ def test_helpers_use_existing_subscriptions_first(tmp_path, monkeypatch, provide
     FakeProvider.replies = [{"role": "assistant", "content": "Free again."}]
     assert asyncio.run(helper(helper="writer", task="x")) == "Free again."
     assert subscriptions.find("claude", str(tmp_path / "missing")) == ""
+
+
+def test_ollama_install_falls_back_when_windows_installer_refuses(tmp_path, monkeypatch):
+    """winget fails with "Installer hash does not match": fetch the official installer and run it."""
+    from assistant import ollama_setup as o
+    monkeypatch.setattr(o.platform, "system", lambda: "Windows")
+    installed, ran, said = [], [], []
+
+    def sh(argv, **kw):
+        ran.append(argv)
+        if argv[0].endswith("OllamaSetup.exe"):
+            installed.append(True)                                   # the direct installer works
+        return NS(returncode=1 if argv[0] == "winget" else 0)
+
+    common = dict(say=said.append, sh=sh, vram_gb=6, ram_gb=34, up=lambda: True, wait=lambda s: None,
+                  works=lambda m: (True, ""), find=lambda: "C:/Ollama/ollama.exe" if installed else "")
+    assert o.run(tmp_path, download=lambda url, say: tmp_path / "OllamaSetup.exe", **common) is True
+    assert [a[0] for a in ran[:2]] == ["winget", str(tmp_path / "OllamaSetup.exe")] and ran[1][1] == "/SILENT"
+    assert ran[2] == ["C:/Ollama/ollama.exe", "pull", "qwen3:8b"]
+    assert json.loads((tmp_path / "config.json").read_text())["brains"][0]["model"] == "qwen3:8b"
+    assert any("official page" in line for line in said)
+
+    installed.clear(); ran.clear()
+    assert o.run(tmp_path, download=lambda url, say: None, **common) is False        # the download failed too
+    assert any("https://ollama.com/download" in line for line in said)
+    assert o.INSTALLER_URL.startswith("https://github.com/ollama/ollama/releases/")
