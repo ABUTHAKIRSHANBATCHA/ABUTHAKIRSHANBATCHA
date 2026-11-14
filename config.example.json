@@ -31,5 +31,17 @@
   "voice_lock": true,
   "voice_threshold": 0.6,
   "watch": [],
-  "watch_seconds": 30
+  "watch_seconds": 30,
+  "projects_root": "",
+  "folder_template": [
+    "01_Client_Requirements",
+    "02_BEP_and_Plans",
+    "03_Models",
+    "04_Drawings",
+    "05_Clash_and_Coordination",
+    "06_Correspondence",
+    "07_Reports",
+    "08_Handover",
+    "99_Incoming"
+  ]
 }

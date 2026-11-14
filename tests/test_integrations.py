@@ -34,12 +34,22 @@ class FakeTelegram:
     def __init__(self):
         self.sent, self.updates = [], []
 
+    files, documents = {}, []
+
     def __call__(self, method, params):
         if method == "sendMessage":
             self.sent.append((params["chat_id"], params["text"]))
             return {"ok": True}
+        if method == "getFile":
+            return {"result": {"file_path": "remote/" + params["file_id"]}}
         batch, self.updates = self.updates, []
         return {"result": batch}
+
+    def download(self, file_path):
+        return self.files[file_path.split("/", 1)[1]]
+
+    def send_document(self, chat, path):
+        self.documents.append((chat, path.name, path.read_bytes()))
 
     def incoming(self, chat, text, n=[0]):
         n[0] += 1
@@ -95,7 +105,7 @@ def test_telegram_polling_dispatches_messages(tmp_path, monkeypatch):
 
     asyncio.run(scenario())
     assert bridge.offset == 501
-    assert any("only read text" in t for _, t in api.sent) and any("not paired" in t for _, t in api.sent)
+    assert sum("not paired" in t for _, t in api.sent) == 2          # the text and the photo, both refused
 
 
 # --------------------------------------------------------------------- email
@@ -333,7 +343,7 @@ def test_voice_lock_is_inactive_without_the_model(tmp_path, monkeypatch):
 
 def test_setup_wizard_writes_config_and_secrets(tmp_path, monkeypatch):
     answers = iter(["Lumi", "Abu", "AED", "sk-test-key", "", "y", "abu@gmail.com", "", "", "mail-pass",
-                    "D:/Projects/Marina", "", "y"])
+                    "D:/Projects", "D:/Projects/Marina", "", "y"])
     said, installed = [], []
     setup_wizard.run(tmp_path, ask=lambda _: next(answers), say=said.append,
                      install_voice=lambda model, say: installed.append(model))
@@ -344,6 +354,7 @@ def test_setup_wizard_writes_config_and_secrets(tmp_path, monkeypatch):
     assert "ANTHROPIC_API_KEY=sk-test-key" in secrets and "LUMI_EMAIL_PASSWORD=mail-pass" in secrets
     assert "LUMI_TELEGRAM_TOKEN" not in secrets and "mail-pass" not in (tmp_path / "config.json").read_text()
     assert installed == [tmp_path / "data" / "voice" / MODEL_NAME]
+    assert config["projects_root"] == "D:/Projects"
     assert config["watch"] == [{"name": "Marina", "path": "D:/Projects/Marina", "kind": "folder"}]
 
     # Running it again and pressing Enter keeps every answer.
@@ -399,7 +410,7 @@ def test_watcher_reports_folder_and_log_changes(tmp_path):
     assert [e["detail"] for e in w2.scan()] == ["fresh after rotation"]
     assert w2.recent(2)[0]["detail"] == "fresh after rotation" and len(w2.recent(50, "marina")) == 3
     summary = w2.summary()
-    assert summary["sources"][0]["files"] == 1 and summary["sources"][2]["files"] is None
+    assert summary["sources"][0]["files"] == 1 and summary["sources"][2]["files"] == 0      # a folder that does not exist yet
 
     for i in range(60):
         (proj / f"sheet{i}.pdf").write_text("x")
@@ -484,3 +495,92 @@ def test_scheduled_task_runs_unattended_and_reports_to_phone(tmp_path, monkeypat
     tools = brain.registry.tools
     assert {"task_schedule", "task_list", "task_cancel", "notify_owner", "recent_changes"} <= set(tools)
     assert asyncio.run(tools["notify_owner"].handler(message="hello")) == "Sent to the phone and the screens."
+
+
+# -------------------------------------------------------------------- filing
+
+from assistant.tools.filing import Filing            # noqa: E402
+
+
+def test_filing_keeps_the_folder_arrangement_and_never_overwrites(tmp_path):
+    root, inbox = tmp_path / "Projects", tmp_path / "inbox"
+    f = Filing(str(root), ["01_Requirements", "03_Models", "99_Incoming"], inbox)
+    assert json.loads(f.folders())["projects"] == []
+    assert "3 standard subfolders" in f.create("Marina Tower")
+    assert sorted(p.name for p in (root / "Marina Tower").iterdir()) == ["01_Requirements", "03_Models", "99_Incoming"]
+    assert "subfolder" in f.create("marina", "03_Models/Structure") and (root / "Marina Tower/03_Models/Structure").is_dir()
+    assert "Already exists" in f.create("marina", "03_Models")
+
+    (inbox / "tower.rvt").write_text("v1")
+    assert "no project folder" in f.file("tower.rvt", "Metro Depot", "03_Models")           # never guesses a project
+    assert f.file("tower.rvt", "marina", "03_Models/Structure").startswith("Filed as Marina Tower")
+    assert (root / "Marina Tower/03_Models/Structure/tower.rvt").read_text() == "v1" and not (inbox / "tower.rvt").exists()
+    (inbox / "tower.rvt").write_text("v2")
+    assert "tower_2.rvt" in f.file("tower.rvt", "marina", "03_Models/Structure")            # kept both
+    (inbox / "scan.pdf").write_text("x")
+    assert "EIR_rev3.pdf" in f.file("scan.pdf", "marina", "01_Requirements", "EIR_rev3")    # renamed, extension kept
+
+    (inbox / "x.txt").write_text("x")
+    assert "outside the project folder" in f.file("x.txt", "marina", "../../elsewhere")
+    outside = tmp_path / "secret.txt"
+    outside.write_text("s")
+    assert "only file things from the inbox" in f.file(str(outside), "marina", "03_Models") and outside.exists()
+    assert "No such file" in f.file("missing.pdf", "marina", "03_Models")
+
+    f.create("Marina Mall")
+    assert "No single project" in f.folders("marina")                                       # ambiguous name
+    tree = json.loads(f.folders("marina tower"))
+    assert tree["folders"]["03_Models"]["subfolders"] == ["Structure"] and tree["folders"]["01_Requirements"]["files"] == 1
+    assert json.loads(f.folders())["files_waiting_in_inbox"] == ["x.txt"]
+    assert "No projects folder is set" in Filing("", [], tmp_path / "i2").folders()
+
+
+def test_file_sent_from_phone_is_filed_and_dashboard_follows(tmp_path, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    root = tmp_path / "Projects"
+    api = FakeTelegram()
+    api.files["f1"] = b"%PDF clash report"
+    app = create_app(Config(data_dir=str(tmp_path / "data"), projects_root=str(root)),
+                     Devices(tmp_path / "devices.json"), telegram_api=api)
+    brain, state = app.state.brain, app.state
+    bridge = state.telegram
+    bridge.chats.append(7)
+    FakeStreamBrain(brain, [
+        message(NS(type="text", text="Which project is this clash report for?"), stop="end_turn"),
+        message(tool_use("t1", "project_folder_create", {"project": "Marina Tower"})),
+        message(tool_use("t2", "file_to_project", {"source": "Clash report L03.pdf", "project": "Marina Tower",
+                                                   "subfolder": "05_Clash_and_Coordination"})),
+        message(NS(type="text", text="Filed under Marina Tower, clash and coordination."), stop="end_turn"),
+        message(tool_use("t3", "send_file_to_phone",
+                         {"path": str(root / "Marina Tower/05_Clash_and_Coordination/Clash report L03.pdf")})),
+        message(NS(type="text", text="Sent."), stop="end_turn"),
+    ])
+    doc = {"chat": {"id": 7}, "document": {"file_id": "f1", "file_unique_id": "u1",
+                                           "file_name": "Clash report L03.pdf", "file_size": 17}}
+
+    async def scenario():
+        await state.watch_once()                                   # baseline before anything is filed
+        await bridge.on_file(7, doc)                               # no note: Lumi asks which project
+        await bridge.on_text(7, "Marina Tower")                    # the answer; no approval is needed to file
+        events = await state.watch_once()
+        await bridge.on_text(7, "send it back to me")
+        await bridge.on_file(7, {"chat": {"id": 7}, "document": {"file_id": "big", "file_unique_id": "b",
+                                                                 "file_name": "model.rvt", "file_size": 300_000_000}})
+        await bridge.on_file(99, doc)                              # stranger
+        return events
+
+    events = asyncio.run(scenario())
+    filed = root / "Marina Tower" / "05_Clash_and_Coordination" / "Clash report L03.pdf"
+    assert filed.read_bytes() == b"%PDF clash report"
+    assert sorted(p.name for p in (root / "Marina Tower").iterdir()) == sorted(Config().folder_template)
+    assert not list((tmp_path / "data" / "inbox").iterdir())                                # inbox emptied
+    assert 'saved in your inbox as "Clash report L03.pdf"' in brain.messages[0]["content"]
+    texts = [t for _, t in api.sent]
+    assert texts[0] == "Which project is this clash report for?"
+    assert texts[1] == "Filed under Marina Tower, clash and coordination."
+    assert any(e["source"] == "Projects" and e["detail"].endswith("Clash report L03.pdf") for e in events)
+    assert api.documents == [(7, "Clash report L03.pdf", b"%PDF clash report")]
+    assert "larger than 20 MB" in texts[3] and "not paired" in texts[4]
+    assert not any(e.get("confirm") for e in [])                                            # (filing tools are approval-free)
+    tools = brain.registry.tools
+    assert not tools["file_to_project"].confirm and not tools["project_folder_create"].confirm

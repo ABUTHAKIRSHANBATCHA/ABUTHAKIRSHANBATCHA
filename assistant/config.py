@@ -25,6 +25,11 @@ class Config:
     currency: str = "INR"            # used for money tracking
     data_dir: str = ""               # where memory and projects are stored; default: ./data
     # The software you work in. Add to this list as your toolset grows.
+    # Where your project folders live, and the subfolders every new project gets.
+    projects_root: str = ""
+    folder_template: list[str] = field(default_factory=lambda: [
+        "01_Client_Requirements", "02_BEP_and_Plans", "03_Models", "04_Drawings",
+        "05_Clash_and_Coordination", "06_Correspondence", "07_Reports", "08_Handover", "99_Incoming"])
     toolset: list[str] = field(default_factory=lambda: [
         "Autodesk Civil 3D", "Revit", "Navisworks", "AutoCAD (2D and 3D)", "AutoCAD Plant 3D",
         "Unreal Engine"])

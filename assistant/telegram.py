@@ -11,23 +11,47 @@ import json
 import re
 import urllib.parse
 import urllib.request
+import uuid
 from pathlib import Path
 
 YES = re.compile(r"^(yes|y|approve|ok|okay|go ahead|do it|sari|seri|சரி|ஆம்|ஆமா)\b", re.I)
 NO = re.compile(r"^(no|n|deny|cancel|stop|vendam|வேண்டாம்|இல்லை)\b", re.I)
 
 
-def http_api(token: str):
-    def call(method: str, params: dict) -> dict:
+class http_api:
+    """The real Telegram Bot API over HTTPS."""
+
+    def __init__(self, token: str) -> None:
+        self.token = token
+
+    def __call__(self, method: str, params: dict) -> dict:
         data = urllib.parse.urlencode(params).encode()
-        with urllib.request.urlopen(f"https://api.telegram.org/bot{token}/{method}", data=data, timeout=40) as r:
+        with urllib.request.urlopen(f"https://api.telegram.org/bot{self.token}/{method}", data=data, timeout=40) as r:
             return json.loads(r.read())
-    return call
+
+    def download(self, file_path: str) -> bytes:
+        with urllib.request.urlopen(f"https://api.telegram.org/file/bot{self.token}/{file_path}", timeout=120) as r:
+            return r.read()
+
+    def send_document(self, chat: int, path: Path) -> dict:
+        boundary = uuid.uuid4().hex
+        body = (f'--{boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n{chat}\r\n'
+                f'--{boundary}\r\nContent-Disposition: form-data; name="document"; filename="{path.name}"\r\n'
+                "Content-Type: application/octet-stream\r\n\r\n").encode() + path.read_bytes() + f"\r\n--{boundary}--\r\n".encode()
+        request = urllib.request.Request(f"https://api.telegram.org/bot{self.token}/sendDocument", data=body,
+                                         headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+        with urllib.request.urlopen(request, timeout=300) as r:
+            return json.loads(r.read())
+
+
+MAX_DOWNLOAD = 20 * 1024 * 1024       # Telegram lets bots fetch files up to 20 MB
+MAX_UPLOAD = 50 * 1024 * 1024         # and send files up to 50 MB
 
 
 class TelegramBridge:
-    def __init__(self, api, brain, hub, devices, store: Path, after_turn=None) -> None:
+    def __init__(self, api, brain, hub, devices, store: Path, after_turn=None, inbox: Path | None = None) -> None:
         self.api, self.brain, self.hub, self.devices = api, brain, hub, devices
+        self.inbox = inbox or store.parent / "inbox"
         self.store, self.after_turn = store, after_turn
         self.chats: list[int] = json.loads(store.read_text()) if store.exists() else []
         self.offset = 0
@@ -59,10 +83,55 @@ class TelegramBridge:
             chat = (message.get("chat") or {}).get("id")
             if chat is None:
                 continue
-            if "text" not in message:
-                await self.send(chat, "I can only read text messages here for now.")
-                continue
-            asyncio.create_task(self.on_text(chat, message["text"].strip()))
+            if "text" in message:
+                asyncio.create_task(self.on_text(chat, message["text"].strip()))
+            elif "document" in message or "photo" in message:
+                asyncio.create_task(self.on_file(chat, message))
+            else:
+                await self.send(chat, "I can read text, documents and photos here. Voice notes are not supported yet.")
+
+    async def on_file(self, chat: int, message: dict) -> None:
+        """Save a document or photo sent from the phone into the inbox, then let the brain file it."""
+        if chat not in self.chats:
+            await self.send(chat, "This chat is not paired. Send  /pair 123456  with the PIN shown on the PC.")
+            return
+        if "document" in message:
+            item = message["document"]
+            name = item.get("file_name") or f"file_{item['file_unique_id']}"
+        else:
+            item = message["photo"][-1]                               # the largest size
+            name = f"photo_{item['file_unique_id']}.jpg"
+        if item.get("file_size", 0) > MAX_DOWNLOAD:
+            await self.send(chat, f"{name} is larger than 20 MB, which is the most Telegram lets me fetch. "
+                                  "Put it in a shared or synced folder on the PC and tell me where it is.")
+            return
+        try:
+            info = await asyncio.to_thread(self.api, "getFile", {"file_id": item["file_id"]})
+            data = await asyncio.to_thread(self.api.download, info["result"]["file_path"])
+        except Exception as e:
+            await self.send(chat, f"I could not download {name}: {e}")
+            return
+        self.inbox.mkdir(parents=True, exist_ok=True)
+        safe = "".join(c if c.isalnum() or c in " ._-()" else "_" for c in name).strip(" .") or "file"
+        target, n = self.inbox / safe, 1
+        while target.exists():
+            n += 1
+            target = self.inbox / f"{Path(safe).stem}_{n}{Path(safe).suffix}"
+        target.write_bytes(data)
+        caption = (message.get("caption") or "").strip()
+        await self.on_text(chat, f"I have sent you a file from my phone. It is saved in your inbox as "
+                                 f"\"{target.name}\" ({len(data) // 1024 or 1} KB)."
+                                 + (f" My note with it: {caption}" if caption else " I added no note.")
+                                 + " File it in the right project folder.")
+
+    async def send_file(self, path: Path) -> str:
+        if not self.chats:
+            return "No phone is paired on Telegram yet."
+        if path.stat().st_size > MAX_UPLOAD:
+            return f"{path.name} is larger than 50 MB, the most Telegram lets me send."
+        for chat in self.chats:
+            await asyncio.to_thread(self.api.send_document, chat, path)
+        return f"Sent {path.name} to the phone."
 
     async def on_text(self, chat: int, text: str) -> None:
         if text.lower().startswith("/pair"):

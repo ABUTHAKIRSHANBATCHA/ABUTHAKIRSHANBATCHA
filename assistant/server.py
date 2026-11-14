@@ -23,10 +23,12 @@ from .config import DATA_DIR, WEB_DIR, Config
 from .memory import Memory
 from .tasks import Tasks
 from .watcher import Watcher
-from .tools import autonomy, connectors
+from .tools import autonomy, connectors, filing as filing_tools
 from .telegram import TelegramBridge, http_api
 from .voice_id import VoiceID
-from .tools import build_registry
+from pathlib import Path
+
+from .tools import Tool, build_registry
 from .tools.lifecycle import Projects
 from .tools.money import Ledger
 from .tools.system import system_stats
@@ -141,7 +143,12 @@ def create_app(cfg: Config, devices: Devices | None = None, telegram_api=None) -
     projects = Projects(cfg.data_path / "projects")
     ledger = Ledger(cfg.data_path / "money", cfg.currency)
     brain = Brain(cfg, build_registry(cfg, hub, memory, projects, ledger), hub, memory)
-    watcher = Watcher(cfg.watch, cfg.data_path / "watch")
+    filing = filing_tools.Filing(cfg.projects_root, cfg.folder_template, cfg.data_path / "inbox")
+    filing_tools.register(brain.registry, filing)
+    watched = list(cfg.watch)
+    if cfg.projects_root and not any(w.get("path") == cfg.projects_root for w in watched):
+        watched.append({"name": "Projects", "path": cfg.projects_root, "kind": "folder"})   # dashboards follow filing
+    watcher = Watcher(watched, cfg.data_path / "watch")
     tasks = Tasks(cfg.data_path / "tasks.json")
 
     def dashboard() -> dict:
@@ -165,7 +172,7 @@ def create_app(cfg: Config, devices: Devices | None = None, telegram_api=None) -
     if telegram_api is None and os.environ.get("LUMI_TELEGRAM_TOKEN"):
         telegram_api = http_api(os.environ["LUMI_TELEGRAM_TOKEN"])
     telegram = TelegramBridge(telegram_api, brain, hub, devices, cfg.data_path / "telegram.json",
-                              after_turn=refresh) if telegram_api else None
+                              after_turn=refresh, inbox=filing.inbox) if telegram_api else None
 
     async def notify(text: str) -> str:
         """Reach the owner wherever they are: every screen, and the phone through Telegram."""
@@ -175,6 +182,20 @@ def create_app(cfg: Config, devices: Devices | None = None, telegram_api=None) -
                 "Shown on the screens only: Telegram is not set up or not paired, so the phone was not reached.")
 
     autonomy.register(brain.registry, tasks, watcher, notify)
+
+    async def send_file_to_phone(path: str) -> str:
+        target = Path(os.path.expandvars(path)).expanduser()
+        if not target.is_file():
+            return f"No such file: {target}"
+        if telegram is None:
+            return "Telegram is not set up, so I cannot send files to the phone."
+        return await telegram.send_file(target)
+
+    brain.registry.add(Tool(
+        "send_file_to_phone",
+        "Send a file from this computer to the owner's phone on Telegram (up to 50 MB), for "
+        "requests like 'send me the latest clash report'.",
+        {"path": {"type": "string"}}, ["path"], send_file_to_phone))
 
     async def run_task(task: dict) -> None:
         parts: list[str] = []

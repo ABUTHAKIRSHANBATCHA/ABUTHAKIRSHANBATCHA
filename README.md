@@ -27,6 +27,8 @@ It is called Lumi; the name is a setting you can change.
 | Connectors: send data to your other apps, such as your own dashboard, each call approved by you | Working |
 | Folder and log watching: new, changed and removed files and new log lines appear on the dashboard and can be sent to your own dashboard automatically | Working |
 | Scheduled work: Lumi does a job at a set time, once or repeating, and reports to your phone; approvals reach you on Telegram | Tested with a stand-in model; needs the Claude brain |
+| Filing from the phone: send a document or photo to Lumi on Telegram, say which project, and it is moved into that project's folder in your folder arrangement; missing folders are created; nothing is overwritten | Tested against a simulated Telegram; needs the Claude brain to choose folders |
+| Send a file from the PC to your phone ("send me the latest clash report") | Tested against a simulated Telegram |
 | Find installed BIM software, launch it, find model files (.rvt .nwd .ifc .dwg ...) | Written for Windows; not yet run on a Windows PC |
 | Live Revit model queries (model info, element counts, warnings, levels, sheets, links) | Written; not yet run inside Revit |
 | Brain (Claude) | Needs your API key; without one it only opens things and reports status |
@@ -113,6 +115,29 @@ Lumi hands bigger jobs to helpers and gives you the conclusion:
 | Writer | Finished emails, proposals and reports |
 
 Try: "research the BIM audit market in Dubai and tell me if it is worth starting".
+
+## Send files from your phone and have them filed
+
+Set your projects folder in `setup.bat` (the folder that holds one folder per project).
+
+1. In Telegram, send Lumi a document or photo. Add a note such as "Marina Tower, clash report"
+   if you like.
+2. If the project or place is not clear, Lumi asks one short question; answer in the chat.
+3. Lumi moves the file into that project's folder and tells you where it went.
+
+- A new project gets your standard subfolders. The default arrangement is:
+  `01_Client_Requirements`, `02_BEP_and_Plans`, `03_Models`, `04_Drawings`,
+  `05_Clash_and_Coordination`, `06_Correspondence`, `07_Reports`, `08_Handover`, `99_Incoming`.
+  Change `folder_template` in `config.json` to your own arrangement.
+- An existing project keeps whatever subfolders it already has; Lumi follows them.
+- Tell Lumi your rules once ("drawings go by discipline, name files PROJECT-TYPE-DATE") and it
+  remembers them.
+- Filing needs no approval, because it only moves files into your projects folder and never
+  overwrites or deletes: a second `tower.rvt` becomes `tower_2.rvt`.
+- Telegram lets Lumi fetch files up to 20 MB and send files up to 50 MB. Larger models have to
+  reach the PC another way (a synced folder, for example); then tell Lumi where the file is.
+- The projects folder is watched automatically, so every filed document shows on the dashboard
+  and reaches your own dashboard if its connector has `"auto": true`.
 
 ## Keep dashboards updated from folders and logs
 
@@ -267,6 +292,7 @@ Then ask "how many warnings are in my model?" The bridge is read-only.
 - A wake word that listens in the background with the page closed. "Hey Lumi" works while the
   page is open and switched on.
 - Voice notes in Telegram, email attachments, calendar.
+- Uploading files through the Lumi web page; files come in through Telegram.
 - Loading your own Revit, Civil 3D or Navisworks model into hologram mode (it shows a sample
   building today).
 - Operating the BIM software itself: changing the Revit model (the bridge only reads),

@@ -32,6 +32,9 @@ class Watcher:
     def _folder(self, source: dict) -> list[dict]:
         root = Path(os.path.expandvars(source["path"])).expanduser()
         if not root.is_dir():
+            # Not there yet: start from empty so its first files count as new. If it was seen
+            # before, it is probably an unplugged drive, so keep what we knew and report nothing.
+            self.state.setdefault(source["name"], {"files": {}, "checked": _now()})
             return []
         seen: dict[str, list] = {}
         for dirpath, dirnames, filenames in os.walk(root):
