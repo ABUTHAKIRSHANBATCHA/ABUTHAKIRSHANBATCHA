@@ -32,6 +32,49 @@ def chain(cfg) -> list[dict]:
     return brains
 
 
+# ---- choosing a brain for the work in hand
+# deep    = thinking work: analysis, documents, plans, writing  -> the most capable brain
+# quick   = everyday commands and short questions               -> the fastest brain, saving the best one's quota
+# private = the owner asked for it to stay on this PC           -> only a brain that runs locally
+GOOD_FOR = {"gemini": ["deep", "quick"], "groq": ["quick", "deep"], "ollama": ["private", "quick", "deep"]}
+ORDER = {"deep": ["gemini", "groq", "ollama"], "quick": ["groq", "ollama", "gemini"]}
+PRIVATE_WORDS = ("private", "privately", "confidential", "offline", "secret", "do not send", "don't send",
+                 "stay on this pc", "locally", "தனிப்பட்ட", "ரகசிய")
+DEEP_WORDS = ("analy", "review", "compare", "evaluate", "assess", "plan", "strategy", "draft", "write ", "rewrite",
+              "report", "proposal", "summar", "explain", "research", "business", "market", "idea", "bep", "eir",
+              "checklist", "requirement", "standard", "iso 19650", "clause", "contract", "document", "pdf", "email",
+              "why ", "how should", "what should", "recommend", "pros and cons", "calculate", "estimate",
+              "ஆய்வு", "திட்டம்", "அறிக்கை", "விளக்க", "ஒப்பிட")
+
+
+def kind_of_work(text: str) -> str:
+    lowered = " " + text.lower() + " "
+    if any(word in lowered for word in PRIVATE_WORDS):
+        return "private"
+    if len(text) > 240 or lowered.startswith(" scheduled task") or any(word in lowered for word in DEEP_WORDS):
+        return "deep"
+    return "quick"
+
+
+def route(text: str, brains: list[dict]) -> tuple[str, list[dict]]:
+    """Pick the order to try the brains in for this request. Returns (kind, ordered brains).
+    For private work only local brains are returned (possibly none)."""
+    lowered = text.lower()
+    for brain in brains:                       # "use ollama ...", "ask gemini ...": the owner's choice wins
+        if any(f"{verb} {brain['name']}" in lowered for verb in ("use", "ask", "with", "via")):
+            return "chosen", [brain] + [b for b in brains if b is not brain]
+    kind = kind_of_work(text)
+
+    def good_for(brain: dict) -> list[str]:
+        return brain.get("good_for") or GOOD_FOR.get(brain["name"], ["quick", "deep"])
+
+    if kind == "private":
+        return kind, [b for b in brains if "private" in good_for(b)]
+    preferred = ORDER[kind]
+    rank = lambda b: (kind not in good_for(b), preferred.index(b["name"]) if b["name"] in preferred else len(preferred))
+    return kind, sorted(brains, key=rank)
+
+
 def for_provider(messages: list[dict], name: str) -> list[dict]:
     """History as one provider should receive it. Tool calls made by a different provider keep
     only the standard fields, because each provider adds private extras the others reject."""

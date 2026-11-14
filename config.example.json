@@ -22,6 +22,7 @@
       "key_env": ""
     }
   ],
+  "auto_select": true,
   "model": "claude-opus-5-5",
   "effort": "medium",
   "http_port": 8765,

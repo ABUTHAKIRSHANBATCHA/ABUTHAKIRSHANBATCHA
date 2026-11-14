@@ -84,8 +84,21 @@ model that fits your graphics card, tests that the model can use tools, and adds
 brains. Models are stored in the `ollama-models` folder beside Lumi. To choose the model
 yourself: `install-ollama.bat llama3.1:8b`.
 
-A good order is Gemini first, Groq second, Ollama last: the online ones are more capable, and
-Ollama is the one that never runs out.
+**Lumi picks the brain to suit the work.** You don't choose each time:
+
+| Kind of work | Examples | Brain used first | Then |
+|---|---|---|---|
+| Quick | "open Revit", "what time is it", filing a file, ticking a checklist item | Groq (fastest) | Ollama, then Gemini |
+| Thinking | reviewing an EIR, drafting BEP sections, business ideas, reports, emails, anything long | Gemini (most capable) | Groq, then Ollama |
+| Private | you say "private", "confidential" or "offline" in the request | Ollama only | Nothing: if Ollama is not available Lumi refuses and does not send it online |
+
+- Quick work goes to Groq first so Gemini's daily limit is kept for the thinking work.
+- To choose yourself, say it: "use Ollama to summarise this", "ask Gemini ...".
+- The top-left of the screen shows which brain answered and what kind of work it judged it to be.
+- The choice is made from the words of your request, so it is sometimes wrong. A thinking
+  job sent to the quick brain still gets done, just less well; say "use Gemini" to redo it.
+- To switch this off and always use the brains in the order you listed them, set
+  `"auto_select": false` in `config.json`.
 
 For Gemini and Groq, setup lists the models your key can use; pick one that supports tools
 (function calling). Free providers change their model names and limits often, so if a model

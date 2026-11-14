@@ -719,7 +719,7 @@ def test_free_brains_take_over_from_each_other(tmp_path, monkeypatch, provider):
     brains = [{"name": "gemini", "base_url": provider + "/gemini", "model": "flash", "key_env": "LUMI_GEMINI_KEY"},
               {"name": "groq", "base_url": "http://127.0.0.1:9/v1", "model": "fast", "key_env": "LUMI_GROQ_KEY"},
               {"name": "ollama", "base_url": provider + "/ollama", "model": "qwen3:8b", "key_env": ""}]
-    app = make_app(tmp_path, monkeypatch, provider="free", brains=brains)
+    app = make_app(tmp_path, monkeypatch, provider="free", brains=brains, auto_select=False)
     brain = app.state.brain
     assert brain.free and brain.brain_name == "free: flash (+2 backup)"
     seen = []
@@ -747,7 +747,7 @@ def test_free_brains_take_over_from_each_other(tmp_path, monkeypatch, provider):
     seen.clear()
     asyncio.run(brain.handle("status please", sink=sink))
     assert [e["text"] for e in seen if e["type"] == "delta"] == ["From Ollama."]
-    assert {"type": "brain", "name": "free: qwen3:8b (+2 backup)"} in seen            # the screen is told
+    assert {"type": "brain", "name": "free: qwen3:8b (+2 backup)", "kind": ""} in seen  # the screen is told
     assert brain.active_free == "ollama" and set(brain.resting) == {"gemini", "groq"}
     sent = FakeProvider.requests[calls_before:]
     assert all(r["model"] == "qwen3:8b" and r["auth"] is None for r in sent)
@@ -843,3 +843,60 @@ def test_ollama_setup_picks_tests_and_saves_a_model(tmp_path):
     assert json.loads((tmp_path / "config.json").read_text())["brains"][1]["model"] == "llama3.1:8b"
     assert any("not suitable" in line for line in said)
     assert o.run(tmp_path, ram_gb=4, works=lambda m: (True, ""), **common) and any("less than the 8 GB" in l for l in said)
+
+
+def test_brain_is_chosen_to_suit_the_work(tmp_path, monkeypatch, provider):
+    kind = free_brain.kind_of_work
+    assert kind("open Revit") == "quick" and kind("what time is it") == "quick"
+    assert kind("file this under Marina Tower") == "quick"
+    assert kind("review the EIR and list every requirement") == "deep"
+    assert kind("is a BIM audit business worth starting in Dubai?") == "deep"
+    assert kind("x" * 300) == "deep" and kind("Scheduled task, running now while I am away: back up") == "deep"
+    assert kind("keep this confidential: summarise the client's contract") == "private"
+    assert kind("இந்த அறிக்கையை ஆய்வு செய்") == "deep"
+
+    brains = [{"name": n, "base_url": f"{provider}/{n}", "model": f"{n}-model", "key_env": ""}
+              for n in ("gemini", "groq", "ollama")]
+    names = lambda text, chain=brains: (free_brain.route(text, chain)[0], [b["name"] for b in free_brain.route(text, chain)[1]])
+    assert names("open Revit") == ("quick", ["groq", "ollama", "gemini"])              # saves the best brain's quota
+    assert names("draft the BEP responsibility matrix") == ("deep", ["gemini", "groq", "ollama"])
+    assert names("privately, summarise this contract") == ("private", ["ollama"])      # never leaves the PC
+    assert names("use ollama to draft the BEP") == ("chosen", ["ollama", "gemini", "groq"])
+    assert names("privately, summarise this", brains[:2]) == ("private", [])           # no local brain set up
+    custom = brains[:2] + [{"name": "lmstudio", "base_url": "x", "model": "m", "good_for": ["private", "deep"]}]
+    assert names("confidential: review this", custom) == ("private", ["lmstudio"])
+
+    app = make_app(tmp_path, monkeypatch, provider="free", brains=brains)
+    brain = app.state.brain
+    seen = []
+
+    async def sink(event):
+        seen.append(event)
+
+    def ask(text):
+        FakeProvider.replies = [{"role": "assistant", "content": "ok"}]
+        seen.clear()
+        asyncio.run(brain.handle(text, sink=sink))
+        return FakeProvider.requests[-1]["model"]
+
+    assert ask("open Revit") == "groq-model"
+    assert ask("review the EIR and list every requirement") == "gemini-model"
+    assert {"type": "brain", "name": "free: gemini-model (+2 backup)", "kind": "deep"} in seen
+    assert ask("keep this private: what does clause 4 mean") == "ollama-model"
+    assert brain.turn_brains is None                                                   # cleared after each request
+
+    # Private work with no local brain is refused, not sent online.
+    online_only = make_app(tmp_path / "b", monkeypatch, provider="free", brains=brains[:2]).state.brain
+    before = len(FakeProvider.requests)
+    seen.clear()
+    asyncio.run(online_only.handle("confidential: summarise the contract", sink=sink))
+    assert len(FakeProvider.requests) == before
+    assert "did not send it anywhere" in next(e["text"] for e in seen if e["type"] == "error")
+
+    # Private work when the local brain is down: also refused.
+    real_chat = free_brain.chat
+    monkeypatch.setattr(free_brain, "chat", lambda *a, **k: (_ for _ in ()).throw(free_brain.FreeAPIError(0, "refused")))
+    seen.clear()
+    asyncio.run(brain.handle("privately: summarise the contract", sink=sink))
+    assert "did not send it anywhere" in next(e["text"] for e in seen if e["type"] == "error")
+    monkeypatch.setattr(free_brain, "chat", real_chat)

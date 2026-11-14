@@ -20,6 +20,7 @@ class Config:
     # Free brains in the order to try them; the next one takes over when one reaches its limit.
     # [{"name": "gemini", "base_url": "...", "model": "...", "key_env": "LUMI_GEMINI_KEY"}, ...]
     brains: list[dict] = field(default_factory=list)
+    auto_select: bool = True         # pick the brain to suit each request; false = always use them in the listed order
     free_base_url: str = ""          # e.g. https://generativelanguage.googleapis.com/v1beta/openai
     free_model: str = ""             # a model name from that provider that supports tools
     model: str = "claude-opus-5-5"

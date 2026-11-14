@@ -124,6 +124,8 @@ class Brain:
         self._system = ""    # built when a conversation starts, then kept stable for caching
         self.active_free = ""                     # which free brain answered last
         self.resting: dict[str, float] = {}       # free brains to skip for a while, by name -> until
+        self.turn_brains: list[dict] | None = None   # the order chosen for the request in progress
+        self.turn_kind = ""
         self.registry = registry
         self.hub = hub
         self.messages: list[dict] = []
@@ -179,7 +181,11 @@ class Brain:
                 else:
                     await self._offline(text)
             except free_brain.FreeAPIError as e:
-                if e.status == 429:
+                if e.status == -1 or self.turn_kind == "private":
+                    await self._say_error(
+                        "You asked me to keep this private, but the brain on this PC is not available, "
+                        "so I did not send it anywhere. Start Ollama (or run install-ollama.bat) and ask again.")
+                elif e.status == 429:
                     await self._say_error("Every free brain has reached its limit for now. Try again in a few "
                                           "minutes; daily limits reset tomorrow.")
                 elif e.status in (401, 403) or "api key" in e.message.lower():
@@ -205,6 +211,7 @@ class Brain:
             finally:
                 await self.hub.broadcast({"type": "reply_done"})
                 self.hub.sink = None
+                self.turn_brains, self.turn_kind = None, ""    # the brain choice lasts one request
 
     async def _say_error(self, text: str) -> None:
         await self.hub.broadcast({"type": "error", "text": text})
@@ -283,7 +290,9 @@ class Brain:
     async def _free_chat(self, messages: list[dict], tools: list[dict] | None = None) -> dict:
         """Ask the free brains in order. One that is out of quota, unreachable or misconfigured
         is rested for a while and the next one takes over."""
-        chain = free_brain.chain(self.cfg)
+        chain = self.turn_brains if self.turn_brains is not None else free_brain.chain(self.cfg)
+        if not chain:
+            raise free_brain.FreeAPIError(-1, "no local brain")
         now = time.time()
         ready = [b for b in chain if self.resting.get(b["name"], 0) <= now] or chain   # all resting: try anyway
         last: free_brain.FreeAPIError | None = None
@@ -299,7 +308,7 @@ class Brain:
                 continue
             if brain["name"] != self.active_free:
                 self.active_free = brain["name"]
-                await self.hub.broadcast({"type": "brain", "name": self.brain_name})
+                await self.hub.broadcast({"type": "brain", "name": self.brain_name, "kind": self.turn_kind})
             reply["_by"] = brain["name"]
             return reply
         raise last
@@ -316,6 +325,8 @@ class Brain:
         self.memory.log("user", text)
         self.messages.append({"role": "user", "content": text})
         tools = free_brain.to_function_tools(self.registry.schemas())
+        if self.cfg.auto_select:                 # choose the brain that suits this request, for the whole turn
+            self.turn_kind, self.turn_brains = free_brain.route(text, free_brain.chain(self.cfg))
         try:
             for _ in range(MAX_TOOL_ROUNDS):
                 reply = await self._free_chat([{"role": "system", "content": self._system}] + self.messages, tools)

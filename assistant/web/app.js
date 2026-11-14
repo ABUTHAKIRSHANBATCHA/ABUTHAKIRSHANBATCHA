@@ -308,7 +308,7 @@
     tool: logTool,
     dashboard: drawDashboard,
     holo(e) { Holo.act(e.action); },
-    brain(e) { setLink(`ONLINE - ${e.name.toUpperCase()}`); },
+    brain(e) { setLink(`ONLINE - ${e.name.toUpperCase()}${e.kind ? " - " + e.kind.toUpperCase() + " WORK" : ""}`); },
     voice_rejected() {
       pendingSend = false; voicePassUntil = 0;
       showReply("Voice lock: I need to recognise your voice first. Tap the mic and try again.", true);
