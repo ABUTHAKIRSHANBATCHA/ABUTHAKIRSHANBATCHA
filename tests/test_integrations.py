@@ -985,3 +985,35 @@ def test_ollama_install_falls_back_when_windows_installer_refuses(tmp_path, monk
     assert o.run(tmp_path, download=lambda url, say: None, **common) is False        # the download failed too
     assert any("https://ollama.com/download" in line for line in said)
     assert o.INSTALLER_URL.startswith("https://github.com/ollama/ollama/releases/")
+
+
+def test_wrong_telegram_token_is_caught(tmp_path, monkeypatch):
+    from assistant.telegram import looks_like_token
+    assert looks_like_token("7712345678:AAHk3-abcDEFghiJKLmnoPQRstuVWXyz012345")
+    for wrong in ("HTTP API:", "Use this token to access the HTTP API:", "", "12345:short", "@my_lumi_bot"):
+        assert not looks_like_token(wrong)
+
+    # In setup: the label pasted by mistake is refused, a second try with the real token is accepted.
+    good = "7712345678:AAHk3-abcDEFghiJKLmnoPQRstuVWXyz012345"
+    #          name owner curr gemini groq claude gpt  api  [telegram x2]      email proj watch log tower voice
+    answers = iter(["", "", "",  "",   "",  "n",   "n", "n", "HTTP API:", good, "n",  "",  "",   "",  "",   "n"])
+    said = []
+    setup_wizard.run(tmp_path, ask=lambda _: next(answers), say=said.append, list_models=lambda u, k: [])
+    assert f"LUMI_TELEGRAM_TOKEN={good}" in (tmp_path / "secrets.env").read_text()
+    assert any("NEXT line" in line for line in said)
+
+    # A wrong value saved by an earlier version is removed when setup runs again with Enter.
+    (tmp_path / "secrets.env").write_text("LUMI_TELEGRAM_TOKEN=HTTP API:\n")
+    keep = iter([""] * 30)
+    setup_wizard.run(tmp_path, ask=lambda _: next(keep), say=said.append, list_models=lambda u, k: [])
+    assert "LUMI_TELEGRAM_TOKEN" not in (tmp_path / "secrets.env").read_text()
+
+    # At start: a wrong token does not switch Telegram "on".
+    monkeypatch.setenv("LUMI_TELEGRAM_TOKEN", "HTTP API:")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    app = create_app(Config(data_dir=str(tmp_path / "d")), Devices(tmp_path / "dev.json"))
+    assert app.state.telegram is None
+    from assistant import check
+    rows = {item: (status, detail) for status, item, detail in check.run(tmp_path, say=lambda *_: None)}
+    assert rows["Telegram"][0] == check.FAIL and "not a bot token" in rows["Telegram"][1]
+    monkeypatch.delenv("LUMI_TELEGRAM_TOKEN")

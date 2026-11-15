@@ -25,7 +25,7 @@ from .tasks import Tasks
 from .watcher import Watcher
 from .tools import autonomy, connectors, filing as filing_tools, tower_tools
 from .tower.service import Tower, TowerError
-from .telegram import TelegramBridge, http_api
+from .telegram import TelegramBridge, http_api, looks_like_token
 from .voice_id import VoiceID
 from pathlib import Path
 
@@ -185,7 +185,7 @@ def create_app(cfg: Config, devices: Devices | None = None, telegram_api=None) -
     async def refresh() -> None:
         await hub.broadcast(dashboard())
 
-    if telegram_api is None and os.environ.get("LUMI_TELEGRAM_TOKEN"):
+    if telegram_api is None and looks_like_token(os.environ.get("LUMI_TELEGRAM_TOKEN", "")):
         telegram_api = http_api(os.environ["LUMI_TELEGRAM_TOKEN"])
     telegram = TelegramBridge(telegram_api, brain, hub, devices, cfg.data_path / "telegram.json",
                               after_turn=refresh, inbox=filing.inbox) if telegram_api else None

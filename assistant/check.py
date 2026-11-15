@@ -47,7 +47,8 @@ def run(root: Path = ROOT, say=print) -> list[tuple[str, str, str]]:
     if cfg.provider == "free":
         chain = free_brain.chain(cfg)
         if not chain:
-            add(FAIL, "Brain", "no free brain is set up - run setup.bat")
+            add(FAIL, "Brain", "no free brain is set up - run install-ollama.bat for a brain on this PC, "
+                               "or setup.bat to add free Gemini / Groq keys")
         tool = [{"type": "function", "function": {"name": "get_time", "description": "Current time"}}]
         for n, b in enumerate(chain, 1):
             label = f"Brain {n}: {b['name']}"
@@ -92,7 +93,11 @@ def run(root: Path = ROOT, say=print) -> list[tuple[str, str, str]]:
             else "installed but did not answer. Open a command window, run the program once and sign in")
 
     # Telegram
-    if env("LUMI_TELEGRAM_TOKEN"):
+    from .telegram import looks_like_token
+    if env("LUMI_TELEGRAM_TOKEN") and not looks_like_token(env("LUMI_TELEGRAM_TOKEN")):
+        add(FAIL, "Telegram", "what was saved is not a bot token (it should look like 1234567890:AAHk3...). "
+                              "Run setup.bat and paste only the code from the line after \"HTTP API:\" in BotFather's message")
+    elif env("LUMI_TELEGRAM_TOKEN"):
         try:
             with urllib.request.urlopen(f"https://api.telegram.org/bot{env('LUMI_TELEGRAM_TOKEN')}/getMe", timeout=20) as r:
                 bot = json.loads(r.read())["result"]

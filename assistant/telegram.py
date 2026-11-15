@@ -18,6 +18,14 @@ YES = re.compile(r"^(yes|y|approve|ok|okay|go ahead|do it|sari|seri|சரி|�
 NO = re.compile(r"^(no|n|deny|cancel|stop|vendam|வேண்டாம்|இல்லை)\b", re.I)
 
 
+TOKEN_SHAPE = re.compile(r"^\d{6,}:[A-Za-z0-9_-]{30,}$")
+
+
+def looks_like_token(text: str) -> bool:
+    """A Telegram bot token looks like 1234567890:AAH...; anything else was pasted by mistake."""
+    return bool(TOKEN_SHAPE.match(text or ""))
+
+
 class http_api:
     """The real Telegram Bot API over HTTPS."""
 

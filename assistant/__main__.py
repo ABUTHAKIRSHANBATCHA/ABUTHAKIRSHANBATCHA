@@ -77,7 +77,9 @@ async def serve() -> None:
         where = "Tailscale: works from anywhere" if ip.startswith("100.") else "same Wi-Fi"
         print(f"  On phone:   https://{ip}:{cfg.https_port}   ({where}; accept the certificate warning once)")
     print(f"  Pairing PIN: {app.state.devices.pin}")
-    print(f"  Telegram:   {'on - send /pair <PIN> to your bot' if app.state.telegram else 'off'}")
+    import os
+    bad_token = os.environ.get("LUMI_TELEGRAM_TOKEN") and not app.state.telegram
+    print(f"  Telegram:   {'on - send /pair <PIN> to your bot' if app.state.telegram else 'OFF - the saved bot token is not valid; run setup.bat' if bad_token else 'off'}")
     print(f"  Email:      {'on (asks before each use)' if 'email_send' in brain.registry.tools else 'off'}")
     voice = app.state.voice
     print(f"  Voice lock: {'on, ' + str(len(voice.voices)) + ' voice(s)' if voice.locked else 'installed, no voice added yet' if voice.available else 'not installed'}")

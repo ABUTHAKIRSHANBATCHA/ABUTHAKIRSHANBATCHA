@@ -14,6 +14,7 @@ from pathlib import Path
 
 from . import free_brain, subscriptions
 from .config import ROOT, Config
+from .telegram import looks_like_token
 from .voice_id import MODEL_NAME, MODEL_URL
 
 MAIL_HOSTS = {
@@ -45,10 +46,18 @@ def run(root: Path = ROOT, ask=input, say=print, install_voice=None, list_models
         answer = ask(f"{text}{f' [{current}]' if current else ''}: ").strip()
         return answer or current
 
-    def secret(text: str, key: str) -> None:
+    def secret(text: str, key: str, valid=None, wrong: str = "") -> None:
         answer = ask(f"{text}{' [saved - Enter to keep]' if secrets.get(key) else ' (Enter to skip)'}: ").strip()
+        if answer and valid and not valid(answer):
+            say(wrong)
+            answer = ask(f"{text} (Enter to skip): ").strip()          # one more try
+            if answer and not valid(answer):
+                say("That is still not right, so nothing was saved for it. Run setup again when you have it.")
+                answer = ""
         if answer:
             secrets[key] = answer
+        elif valid and secrets.get(key) and not valid(secrets[key]):
+            del secrets[key]                                           # a wrong value saved earlier
 
     def yes(text: str, current: bool) -> bool:
         answer = ask(f"{text} (y/n) [{'y' if current else 'n'}]: ").strip().lower()
@@ -117,7 +126,10 @@ def run(root: Path = ROOT, ask=input, say=print, install_voice=None, list_models
         secret("Claude API key", "ANTHROPIC_API_KEY")
 
     say("\n-- Phone messaging (Telegram) --\nIn Telegram, message @BotFather, send /newbot, and copy the token it gives you.")
-    secret("Telegram bot token", "LUMI_TELEGRAM_TOKEN")
+    say("The token is the long code on its own line, like  1234567890:AAHk3...  Copy only that code.")
+    secret("Telegram bot token", "LUMI_TELEGRAM_TOKEN", looks_like_token,
+           "That is not a bot token. BotFather's message says \"Use this token to access the HTTP API:\" and the\n"
+           "token is the code on the NEXT line (digits, a colon, then letters). Paste only that.")
 
     say("\n-- Email --\nOptional. It reads and sends only after you approve each time.")
     mail = {**defaults.email, **config.get("email", {})}
