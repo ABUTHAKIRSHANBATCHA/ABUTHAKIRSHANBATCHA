@@ -13,10 +13,15 @@ import ipaddress
 import json
 import sys
 
-import uvicorn
+from .config import DATA_DIR, ROOT, load_config, load_secrets
+from .deps import ensure
 
-from .config import DATA_DIR, load_config, load_secrets
-from .server import create_app, lan_addresses
+if not ensure(ROOT):          # an updated program on an older installation: fetch what is new
+    sys.exit(1)
+
+import uvicorn  # noqa: E402
+
+from .server import create_app, lan_addresses  # noqa: E402
 
 
 def ensure_certificate(ips: list[str]) -> tuple[str, str]:

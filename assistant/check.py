@@ -34,6 +34,10 @@ def run(root: Path = ROOT, say=print) -> list[tuple[str, str, str]]:
     add(OK if v >= (3, 10) else FAIL, "Python", f"{v.major}.{v.minor}.{v.micro} on {platform.system()} {platform.release()}")
     missing = [m for m in ("anthropic", "fastapi", "uvicorn", "psutil", "cryptography", "pypdf", "docx", "sqlalchemy", "openpyxl")
                if not _has(m)]
+    if missing:                                    # try to repair before reporting
+        from .deps import ensure
+        ensure(ROOT, say=lambda *_: None)
+        missing = [m for m in missing if not _has(m)]
     add(FAIL if missing else OK, "Packages", f"missing: {', '.join(missing)} - run setup.bat" if missing else "all installed")
     add(OK if (root / "config.json").exists() else WARN, "Settings file",
         "config.json found" if (root / "config.json").exists() else "config.json not found - run setup.bat")

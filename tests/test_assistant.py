@@ -407,3 +407,20 @@ def test_websites_open_in_chrome_when_installed(app, monkeypatch):
     monkeypatch.setattr(system, "chrome_path", lambda: "C:/Chrome/chrome.exe")
     assert system.open_target("https://example.org").endswith("default browser.") and len(launched) == 1
     assert "Google Chrome" in system_prompt(Config())
+
+
+def test_missing_packages_are_installed_on_start(tmp_path):
+    from types import SimpleNamespace
+    from assistant import deps
+    assert deps.missing() == []                                    # this test environment is complete
+    ran, said = [], []
+
+    def run(argv, **kw):
+        ran.append(argv)
+        return SimpleNamespace(returncode=0)
+
+    assert deps.ensure(tmp_path, say=said.append, run=run) is True and ran == []          # nothing to do
+    # A package that cannot be found: pip is asked for requirements.txt, and failure is reported plainly.
+    assert deps.ensure(tmp_path, say=said.append, run=run, names=["sqlalchemy", "no_such_package_xyz"]) is False
+    assert ran[0][1:4] == ["-m", "pip", "install"] and ran[0][-1] == str(tmp_path / "requirements.txt")
+    assert "no_such_package_xyz" in said[0] and "could not be installed" in said[-1]
